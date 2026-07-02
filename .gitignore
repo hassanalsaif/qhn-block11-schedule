@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+
+# Backup files
+*.bak
+*.bak2
+*.bak3
+*.bak4
+*.bak5
+
+# Data files (stay local only)
+*.csv
+*.xlsx
+
+# PDFs and Word source docs
+*.pdf
+block 11.docx
+
+# Python scripts (dev tools)
+*.py
+
+# Unpacked template dirs
+block11_unpacked/
+unpacked_template/
+
+# Scratch / generated files
+restore_cmd.txt
+current_schedule.json
+parsed_schedule.json
+new_schedule.js
+bake_schedule.py
+fix_layout.py
+fix_tables.py
+
+# Vite / build
+app/src/
+app/node_modules/
+app/package.json
+app/package-lock.json
+app/vite.config.js
+
+# Claude session data
+.claude/projects/

@@ -1,0 +1,2198 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>QHN — Block 11 Duty Rota</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+  <script src="/jszip.min.js"></script>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:#f8fafc;font-family:Inter,system-ui,sans-serif}
+    ::-webkit-scrollbar{width:6px;height:6px}
+    ::-webkit-scrollbar-track{background:#f1f5f9}
+    ::-webkit-scrollbar-thumb{background:#94a3b8;border-radius:3px}
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+const { useState, useEffect } = React;
+
+const initialSchedule = [
+  { date:"Jul 5", greg:"05/07", hijri:"20 Muh", day:"Sun", type:"WD", SO:["H.Saif"], NICU:["Dina"], PICU:["Z.Sairafi"], PMW:["A.Darora"], DC_NICU:["H.Amrad"], DC_PMW:["Reem","A.Qassab"] },
+  { date:"Jul 6", greg:"06/07", hijri:"21 Muh", day:"Mon", type:"WD", SO:["F.Saffar"], NICU:["A.Ibrahim"], PICU:["Abdulla"], PMW:["Sajad"], DC_NICU:["Sajad"], DC_PMW:["Abdulla","A.Ibrahim"] },
+  { date:"Jul 7", greg:"07/07", hijri:"22 Muh", day:"Tue", type:"WD", SO:["H.Jalood"], NICU:["Mustafa"], PICU:["Yasir"], PMW:["Wasayif"], DC_NICU:["Yasir"], DC_PMW:["H.Albaiek","A.Rashid"] },
+  { date:"Jul 8", greg:"08/07", hijri:"23 Muh", day:"Wed", type:"WD", SO:["Reem"], NICU:["A.Basarah","A.Qassab"], PICU:["A.Dayin","S.Zaidani"], PMW:["Z.Madeh"], DC_NICU:["M.Hajji"], DC_PMW:["H.Saif","Z.Madeh"] },
+  { date:"Jul 9", greg:"09/07", hijri:"24 Muh", day:"Thu", type:"WE", SO:["H.Albaiek"], NICU:["H.Amrad"], PICU:["A.Darora"], PMW:["Sajidah","F.Ghanim"], DC_NICU:["Sajidah"], DC_PMW:["Qasim","Z.Aman"] },
+  { date:"Jul 10", greg:"10/07", hijri:"25 Muh", day:"Fri", type:"WE", SO:["A.Ibrahim"], NICU:["Z.Sairafi"], PICU:["Wasayif","Qasim"], PMW:["M.Hajji"], DC_NICU:[], DC_PMW:["O.Alsaihati"] },
+  { date:"Jul 11", greg:"11/07", hijri:"26 Muh", day:"Sat", type:"WE", SO:["Sara"], NICU:["Dina"], PICU:["A.Rashid"], PMW:["Z.Madeh"], DC_NICU:[], DC_PMW:[] },
+  { date:"Jul 12", greg:"12/07", hijri:"27 Muh", day:"Sun", type:"WD", SO:["H.Saif","H.Jalood"], NICU:["M.Khadhrawi","Yasir"], PICU:["A.Dayin"], PMW:["Sajidah","Anwar"], DC_NICU:["A.Basarah"], DC_PMW:["F.Ghanim","A.Ibrahim"] },
+  { date:"Jul 13", greg:"13/07", hijri:"28 Muh", day:"Mon", type:"WD", SO:["F.Saffar","Reem"], NICU:["A.Musalllam","Sajad"], PICU:["S.Zaidani"], PMW:["A.Basarah"], DC_NICU:["M.Hajji"], DC_PMW:["Z.Madeh","H.Saif"] },
+  { date:"Jul 14", greg:"14/07", hijri:"29 Muh", day:"Tue", type:"WD", SO:["A.Ibrahim","H.Albaiek"], NICU:["Qasim","H.Amrad"], PICU:["A.Darora","Wasayif"], PMW:["M.Hajji","F.Ghanim"], DC_NICU:["Yasir"], DC_PMW:["Anwar","Qasim"] },
+  { date:"Jul 15", greg:"15/07", hijri:"30 Muh", day:"Wed", type:"WD", SO:["Sara"], NICU:["Dina","Sajidah"], PICU:["A.Rashid","Anwar"], PMW:["Z.Madeh"], DC_NICU:["Sajad"], DC_PMW:["Z.Alwan","A.Rashid"] },
+  { date:"Jul 16", greg:"16/07", hijri:"01 Saf", day:"Thu", type:"WE", SO:["H.Saif"], NICU:["Yasir"], PICU:["A.Dayin"], PMW:["S.Zaidani"], DC_NICU:["Sajidah"], DC_PMW:["F.Ghanim","H.Jalood"] },
+  { date:"Jul 17", greg:"17/07", hijri:"02 Saf", day:"Fri", type:"WE", SO:["F.Saffar"], NICU:["M.Khadhrawi"], PICU:["Sajad"], PMW:["A.Basarah","Z.Alwan"], DC_NICU:[], DC_PMW:["F.Hamood"] },
+  { date:"Jul 18", greg:"18/07", hijri:"03 Saf", day:"Sat", type:"WE", SO:["H.Jalood"], NICU:["Mustafa"], PICU:["Qasim"], PMW:["F.Ghanim"], DC_NICU:[], DC_PMW:[] },
+  { date:"Jul 19", greg:"19/07", hijri:"04 Saf", day:"Sun", type:"WD", SO:["H.Amrad"], NICU:["H.Albaiek"], PICU:["A.Darora"], PMW:["M.Hajji","Z.Madan"], DC_NICU:["A.Basarah"], DC_PMW:["Z.Abdulmohsen","Sara"] },
+  { date:"Jul 20", greg:"20/07", hijri:"05 Saf", day:"Mon", type:"WD", SO:["Sara"], NICU:["Z.Sairafi","A.Rashid"], PICU:["A.Basarah","A.Dayin"], PMW:["S.Zaidani"], DC_NICU:["Yasir"], DC_PMW:["S.Zaidani","Arwa"] },
+  { date:"Jul 21", greg:"21/07", hijri:"06 Saf", day:"Tue", type:"WD", SO:["H.Saif"], NICU:["M.Khadhrawi","Yasir"], PICU:["Shahad","Qasim"], PMW:["Sajidah"], DC_NICU:["Sajidah"], DC_PMW:["F.Ghanim","H.Jalood"] },
+  { date:"Jul 22", greg:"22/07", hijri:"07 Saf", day:"Wed", type:"WD", SO:["F.Saffar","Arwa"], NICU:["Mustafa"], PICU:["M.Hajji","F.Ghanim"], PMW:["Z.Abdulmohsen","Anwar"], DC_NICU:["M.Hajji"], DC_PMW:["Anwar","A.Rashid"] },
+  { date:"Jul 23", greg:"23/07", hijri:"08 Saf", day:"Thu", type:"WE", SO:["Reem"], NICU:["Sajad"], PICU:["Z.Madan"], PMW:["A.Basarah"], DC_NICU:["Sajad"], DC_PMW:["Z.Madan","Sara"] },
+  { date:"Jul 24", greg:"24/07", hijri:"09 Saf", day:"Fri", type:"WE", SO:["H.Albaiek"], NICU:["Sajidah","H.Amrad"], PICU:["A.Darora"], PMW:["S.Zaidani"], DC_NICU:[], DC_PMW:[] },
+  { date:"Jul 25", greg:"25/07", hijri:"10 Saf", day:"Sat", type:"WE", SO:["H.Jalood"], NICU:["A.Musalllam"], PICU:["A.Rashid"], PMW:["Anwar"], DC_NICU:[], DC_PMW:["F.Hamood","O.Alsaihati"] },
+  { date:"Jul 26", greg:"26/07", hijri:"11 Saf", day:"Sun", type:"WD", SO:["Sara","Arwa"], NICU:["Z.Sairafi"], PICU:["Shahad","A.Basarah"], PMW:["Z.Abdulmohsen","F.Ghanim"], DC_NICU:["A.Basarah"], DC_PMW:["S.Zaidani","Safia"] },
+  { date:"Jul 27", greg:"27/07", hijri:"12 Saf", day:"Mon", type:"WD", SO:["Reem"], NICU:["Sajad","Qasim"], PICU:["A.Dayin"], PMW:["M.Hajji","Z.Madan"], DC_NICU:["M.Hajji"], DC_PMW:["Anwar","Qasim"] },
+  { date:"Jul 28", greg:"28/07", hijri:"13 Saf", day:"Tue", type:"WD", SO:["H.Albaiek"], NICU:["H.Amrad"], PICU:["S.Zaidani"], PMW:["Sajidah"], DC_NICU:["Sajidah"], DC_PMW:["Z.Aman","H.Albaiek"] },
+  { date:"Jul 29", greg:"29/07", hijri:"14 Saf", day:"Wed", type:"WD", SO:["H.Jalood","Safia"], NICU:["A.Musalllam","A.Rashid"], PICU:["Z.Aman","F.Ghanim"], PMW:["Anwar"], DC_NICU:["A.Basarah"], DC_PMW:["Z.Abdulmohsen","Reem"] },
+  { date:"Jul 30", greg:"30/07", hijri:"15 Saf", day:"Thu", type:"WE", SO:["F.Saffar"], NICU:["Z.Sairafi"], PICU:["M.Hajji"], PMW:["Z.Abdulmohsen"], DC_NICU:["Z.Sairafi"], DC_PMW:["Z.Madan","Arwa"] },
+  { date:"Jul 31", greg:"31/07", hijri:"16 Saf", day:"Fri", type:"WE", SO:["H.Saif","Arwa"], NICU:["Yasir"], PICU:["Shahad"], PMW:["A.Dayin"], DC_NICU:[], DC_PMW:[] },
+  { date:"Aug 1", greg:"01/08", hijri:"17 Saf", day:"Sat", type:"WE", SO:["Reem"], NICU:["Sara"], PICU:["Anwar"], PMW:["Z.Aman"], DC_NICU:[], DC_PMW:[] }
+];
+
+// ── Resident metadata ─────────────────────────────────────────────────────────
+const rotationMap = {
+  "H.Amrad":"NICU","Z.Sairafi":"NICU","Sajad":"NICU","Yasir":"NICU","Sajidah":"NICU","A.Basarah":"NICU","M.Hajji":"NICU",
+  "F.Saffar":"PICU","Shahad":"PICU","A.Darora":"PICU","A.Dayin":"PICU",
+  "A.Qassab":"GP","Qasim":"GP","Abdulla":"GP","Sara":"GP","Z.Aman":"GP","Z.Madeh":"GP","Z.Madan":"GP","Anwar":"GP","F.Ghanim":"GP","S.Zaidani":"GP",
+  "M.Khadhrawi":"OPD","A.Musalllam":"OPD","Wasayif":"OPD",
+  "Dina":"ALL/IMM","Mustafa":"ALL/IMM","H.Saif":"CARDIO","H.Albaiek":"GI",
+  "H.Jalood":"ENDO","Arwa":"ENDO","Reem":"PULMO","Safia":"ID","A.Rashid":"HEMATO",
+  "Z.Alwan":"ANEST","Z.Abdulmohsen":"ANEST","A.Ibrahim":"RESEARCH",
+  "Musawi":"PEM","Malak":"RHEUMA","F.Hamood":"GP","O.Alsaihati":"GP",
+};
+const levelMap = {
+  "Dina":"R4","M.Khadhrawi":"R4","Mustafa":"R4","A.Musalllam":"R4","A.Qassab":"R4",
+  "H.Saif":"R3","H.Jalood":"R3","H.Amrad":"R3","Reem":"R3","Safia":"R3","Z.Sairafi":"R3","F.Saffar":"R3","Sara":"R3","Arwa":"R3","A.Ibrahim":"R3",
+  "Sajad":"R2","Yasir":"R2","Shahad":"R2","A.Darora":"R2","Wasayif":"R2","A.Rashid":"R2","Qasim":"R2","H.Albaiek":"R3","Abdulla":"R2",
+  "Sajidah":"R1","A.Dayin":"R1","A.Basarah":"R1","M.Hajji":"R1","Z.Alwan":"R1","Z.Abdulmohsen":"R1","Z.Aman":"R1","Z.Madeh":"R1","Z.Madan":"R1","Anwar":"R1","F.Ghanim":"R1","S.Zaidani":"R1",
+  "Musawi":"EXT","Malak":"EXT","F.Hamood":"EXT","O.Alsaihati":"EXT",
+};
+
+// Filter groups
+const filterGroups = {
+  "NICU Team": new Set(["H.Amrad","Z.Sairafi","Sajad","Yasir","Sajidah","A.Basarah","M.Hajji"]),
+  "PICU Team": new Set(["F.Saffar","Shahad","A.Darora","A.Dayin"]),
+  "R4": new Set(Object.keys(levelMap).filter(k=>levelMap[k]==="R4")),
+  "R3": new Set(Object.keys(levelMap).filter(k=>levelMap[k]==="R3")),
+  "R2": new Set(Object.keys(levelMap).filter(k=>levelMap[k]==="R2")),
+  "R1": new Set(Object.keys(levelMap).filter(k=>levelMap[k]==="R1")),
+  "GP Team": new Set(["A.Qassab","Qasim","Abdulla","Sara","Z.Aman","Z.Madeh","Z.Madan","Anwar","F.Ghanim","S.Zaidani"]),
+};
+
+const filterColors = {
+  "NICU Team": { active:"#1d4ed8", light:"#dbeafe", text:"#1e3a8a" },
+  "PICU Team": { active:"#9d174d", light:"#fce7f3", text:"#831843" },
+  "R4":        { active:"#1e3a8a", light:"#dbeafe", text:"#1e3a8a" },
+  "R3":        { active:"#166534", light:"#dcfce7", text:"#14532d" },
+  "R2":        { active:"#92400e", light:"#fef3c7", text:"#78350f" },
+  "R1":        { active:"#6b21a8", light:"#f3e8ff", text:"#581c87" },
+  "GP Team":   { active:"#065f46", light:"#d1fae5", text:"#064e3b" },
+};
+const lvStyle = {
+  R4:{bg:"#dbeafe",tx:"#1e3a8a"},
+  R3:{bg:"#dcfce7",tx:"#166534"},
+  R2:{bg:"#fef3c7",tx:"#78350f"},
+  R1:{bg:"#f3e8ff",tx:"#581c87"},
+  EXT:{bg:"#fed7aa",tx:"#9a3412"},
+};
+
+// Constraint data
+const noSaturdayRes  = new Set(["H.Amrad","Z.Sairafi","Sajad","Yasir","Sajidah","A.Basarah","M.Hajji","F.Saffar","Shahad","A.Darora","A.Dayin","H.Saif"]);
+const noMondayRes    = new Set(["Dina","Mustafa","H.Saif"]);
+const noSundayRes    = new Set(["Reem"]);
+const r1Res          = new Set(["Sajidah","A.Dayin","A.Basarah","M.Hajji","Z.Alwan","Z.Abdulmohsen","Z.Aman","Z.Madeh","Z.Madan","Anwar","F.Ghanim","S.Zaidani"]);
+const nicuUnit       = new Set(["H.Amrad","Z.Sairafi","Sajad","Yasir","Sajidah","A.Basarah","M.Hajji"]);
+const picuUnit       = new Set(["F.Saffar","Shahad","A.Darora","A.Dayin"]);
+const unwantedDays   = {"Dina":["Jul 31","Aug 1"],"Mustafa":["Jul 26","Aug 1"],"Yasir":["Jul 10","Jul 11"],"Shahad":["Jul 16","Jul 17","Jul 18","Jul 19","Jul 27","Jul 28","Jul 29"],"A.Rashid":["Jul 31","Aug 1"],"Z.Alwan":["Jul 12","Jul 13"],"Z.Madeh":["Jul 17","Jul 18"],"Z.Madan":["Jul 31","Aug 1"],"Anwar":["Jul 8","Jul 9"],"F.Ghanim":["Jul 7","Jul 30","Jul 31","Aug 1"],"S.Zaidani":["Jul 5","Jul 6"]};
+const vacationWeeks  = {"A.Qassab":["W2","W3","W4"],"Safia":["W1","W2"],"Arwa":["W1","W2"],"A.Ibrahim":["W3","W4"],"Shahad":["W1","W2"],"Wasayif":["W3","W4"],"Abdulla":["W2","W3","W4"],"H.Salman":["W1","W2","W3","W4"],"Z.Alwan":["W1"],"Z.Abdulmohsen":["W1","W2"],"Z.Aman":["W2","W3"],"Z.Madeh":["W3","W4"],"Z.Madan":["W1","W2"]};
+
+function getWeek(d){if(["Jul 5","Jul 6","Jul 7","Jul 8","Jul 9","Jul 10","Jul 11"].includes(d))return"W1";if(["Jul 12","Jul 13","Jul 14","Jul 15","Jul 16","Jul 17","Jul 18"].includes(d))return"W2";if(["Jul 19","Jul 20","Jul 21","Jul 22","Jul 23","Jul 24","Jul 25"].includes(d))return"W3";return"W4";}
+
+const slotMax   = {SO:2,NICU:2,PICU:2,PMW:3};
+const slots     = ["SO","NICU","PICU","PMW"];
+const slotLabel = {SO:"Senior Overall",NICU:"NICU",PICU:"PICU",PMW:"PMW"};
+const slotHdrBg = {SO:"#1e3a5f",NICU:"#1d4ed8",PICU:"#9d174d",PMW:"#065f46"};
+const dcSlots    = ["DC_PMW","DC_NICU"];
+const dcSlotLabel= {DC_PMW:"Ward (Day)",DC_NICU:"NICU (Day)"};
+const dcSlotHdrBg= {DC_PMW:"#b45309",DC_NICU:"#0e7490"};
+const dcSlotMax  = {DC_PMW:2,DC_NICU:1}; // DC_PMW holds 1 senior + 1 junior
+
+const rotColors = {
+  NICU:{bg:"#dbeafe",bd:"#3b82f6",tx:"#1e3a8a"},PICU:{bg:"#fce7f3",bd:"#db2777",tx:"#831843"},
+  GP:{bg:"#d1fae5",bd:"#10b981",tx:"#064e3b"},OPD:{bg:"#fff7ed",bd:"#f97316",tx:"#7c2d12"},
+  "ALL/IMM":{bg:"#ede9fe",bd:"#7c3aed",tx:"#3b0764"},CARDIO:{bg:"#fef9c3",bd:"#ca8a04",tx:"#713f12"},
+  ENDO:{bg:"#f0fdf4",bd:"#16a34a",tx:"#14532d"},PULMO:{bg:"#ecfeff",bd:"#0891b2",tx:"#164e63"},
+  ID:{bg:"#fef2f2",bd:"#dc2626",tx:"#7f1d1d"},HEMATO:{bg:"#fdf4ff",bd:"#a21caf",tx:"#4a044e"},
+  ANEST:{bg:"#f1f5f9",bd:"#64748b",tx:"#1e293b"},RESEARCH:{bg:"#f0fdfa",bd:"#0d9488",tx:"#134e4a"},
+};
+
+function deepClone(s){return s.map(r=>({...r,SO:[...r.SO],NICU:[...r.NICU],PICU:[...r.PICU],PMW:[...r.PMW],DC_PMW:[...(r.DC_PMW||[])],DC_NICU:[...(r.DC_NICU||[])]}));}
+
+// Returns per-unit level breakdown for next-day availability.
+// For each unit, groups members by R-level and computes avail/total (post-call or vacation = unavailable).
+function getAvailability(sched,dayIdx){
+  if(dayIdx===0)return null;
+  const prev=sched[dayIdx-1];
+  const postCall=new Set([...prev.SO,...prev.NICU,...prev.PICU,...prev.PMW]);
+  const week=getWeek(sched[dayIdx].date);
+  function unitBreakdown(team){
+    const groups={};
+    [...team].forEach(n=>{
+      const lv=levelMap[n]||"?";
+      if(!groups[lv])groups[lv]={avail:0,total:0,postCall:[],vacation:[]};
+      groups[lv].total++;
+      if(postCall.has(n))groups[lv].postCall.push(n);
+      else if((vacationWeeks[n]||[]).includes(week))groups[lv].vacation.push(n);
+      else groups[lv].avail++;
+    });
+    return groups;
+  }
+  function unitTotal(groups){
+    let a=0,t=0;Object.values(groups).forEach(g=>{a+=g.avail;t+=g.total;});return{avail:a,total:t};
+  }
+  const gpTeam = week==="W1"||week==="W2"
+    ? new Set([...filterGroups["GP Team"],"H.Albaiek"])
+    : filterGroups["GP Team"];
+  const nicu=unitBreakdown(nicuUnit),picu=unitBreakdown(picuUnit),gp=unitBreakdown(gpTeam);
+  return{nicu,picu,gp,nicuTot:unitTotal(nicu),picuTot:unitTotal(picu),gpTot:unitTotal(gp)};
+}
+
+function checkWarnings(newSched,name,toDate,toSlot){
+  const warns=[];const idx={};newSched.forEach((r,i)=>{idx[r.date]=i;});
+  const toRow=newSched.find(r=>r.date===toDate);
+  // Day-call slots: only check max capacity and vacation
+  if(dcSlots.includes(toSlot)){
+    const max=dcSlotMax[toSlot]||1;
+    if((toRow[toSlot]||[]).length>max)warns.push(`Day call capacity: ${dcSlotLabel[toSlot]} on ${toDate} already has ${toRow[toSlot].length} resident(s) (max ${max}).`);
+    const week=getWeek(toDate);if((vacationWeeks[name]||[]).includes(week))warns.push(`Vacation: ${name} is on vacation during ${week} (${toDate}).`);
+    return warns;
+  }
+  const max=slotMax[toSlot]||2;
+  if(toRow[toSlot].length>max)warns.push(`Slot capacity: ${slotLabel[toSlot]} on ${toDate} has ${toRow[toSlot].length} residents (max ${max}).`);
+  if((unwantedDays[name]||[]).includes(toDate))warns.push(`Unwanted day: ${name} marked ${toDate} as unwanted.`);
+  if(r1Res.has(name)&&["Jul 5","Jul 6","Jul 7"].includes(toDate))warns.push(`R1 rule: ${name} should not cover the first 3 days.`);
+  if(noSaturdayRes.has(name)&&toRow?.day==="Sat")warns.push(`No Saturday: ${name} (${rotationMap[name]}) should not cover Saturday.`);
+  if(noMondayRes.has(name)&&toRow?.day==="Mon")warns.push(`No Monday: ${name} (${rotationMap[name]}) should not cover Monday.`);
+  if(noSundayRes.has(name)&&toRow?.day==="Sun")warns.push(`No Sunday: ${name} (${rotationMap[name]}) should not cover Sunday.`);
+  const week=getWeek(toDate);if((vacationWeeks[name]||[]).includes(week))warns.push(`Vacation: ${name} is on vacation during ${week} (${toDate}).`);
+  if(toSlot==="NICU"&&nicuUnit.has(name)){const o=(toRow.NICU||[]).filter(n=>n!==name&&nicuUnit.has(n));if(o.length)warns.push(`Same NICU unit: ${name} and ${o.join(", ")} are both NICU daytime in NICU slot on ${toDate}.`);}
+  if(toSlot==="PICU"&&picuUnit.has(name)){const o=(toRow.PICU||[]).filter(n=>n!==name&&picuUnit.has(n));if(o.length&&toRow.day!=="Thu"&&toRow.day!=="Fri")warns.push(`Same PICU unit: ${name} and ${o.join(", ")} are both PICU daytime in PICU slot on ${toDate} (weekday).`);}
+  const allCalls=newSched.flatMap(r=>{const f=slots.find(s=>r[s].includes(name));return f?[idx[r.date]]:[];}).sort((a,b)=>a-b);
+  for(let i=1;i<allCalls.length;i++){const gap=allCalls[i]-allCalls[i-1];if(gap<4){warns.push(`Gap: ${name} only ${gap} day(s) between ${newSched[allCalls[i-1]].date} and ${newSched[allCalls[i]].date} (min 4).`);}}
+  return warns;
+}
+
+async function exportDocx(sched){
+  if(typeof JSZip==="undefined")throw new Error("JSZip library not loaded — check internet connection and refresh the page.");
+  const resp=await fetch("/block11_template.docx?v=" + Date.now());
+  if(!resp.ok)throw new Error(`Template not found (HTTP ${resp.status}). Make sure block11_template.docx is in the app/ folder.`);
+  const buf=await resp.arrayBuffer();
+  const zip=await JSZip.loadAsync(buf);
+  let xml=await zip.file("word/document.xml").async("string");
+
+  // Color per resident based on their DAYTIME rotation unit
+  function resColor(name){
+    const rot=rotationMap[name]||"";
+    if(rot==="NICU")return"C2185B";   // pink
+    if(rot==="PICU")return"1565C0";   // blue
+    if(rot==="GP")  return"2E7D32";   // green
+    return null; // black
+  }
+  // Build cell XML with one colored <w:r> run per resident name
+  function fillCellNames(cellXml,names){
+    if(!names||names.length===0)return cellXml;
+    const runs=names.map((name,idx)=>{
+      const color=resColor(name);
+      const colorTag=color?`<w:color w:val="${color}"/>`:"";
+      const text=name+(idx<names.length-1?", ":"");
+      const escaped=text.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+      return`<w:r><w:rPr>${colorTag}<w:b/><w:bCs/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr><w:t xml:space="preserve">${escaped}</w:t></w:r>`;
+    }).join("");
+    return cellXml.replace("</w:pPr></w:p>",`</w:pPr>${runs}</w:p>`);
+  }
+  // Plain fill for non-resident cells (dates)
+  function fillCell(cellXml,text){
+    if(!text)return cellXml;
+    const escaped=text.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    return cellXml.replace("</w:pPr></w:p>",`</w:pPr><w:r><w:rPr><w:b/><w:bCs/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr><w:t xml:space="preserve">${escaped}</w:t></w:r></w:p>`);
+  }
+
+  const parts=xml.split("<w:tr ");
+  for(let i=0;i<sched.length;i++){
+    const row=sched[i];
+    const pi=i+3;
+    const cells=parts[pi].split("<w:tc>");
+    cells[2]=fillCell(cells[2],row.greg);
+    cells[3]=fillCell(cells[3],row.hijri);
+    const isWE=row.day==="Fri"||row.day==="Sat"; // Fri+Sat: merged day-call cell (PMW only); Thu: full 9-col with DC_PMW+DC_NICU
+    if(!isWE){
+      cells[4]=fillCellNames(cells[4],row.DC_PMW);
+      cells[5]=fillCellNames(cells[5],row.DC_NICU);
+      cells[6]=fillCellNames(cells[6],row.SO);
+      cells[7]=fillCellNames(cells[7],row.NICU);
+      cells[8]=fillCellNames(cells[8],row.PICU);
+      cells[9]=fillCellNames(cells[9],row.PMW);
+    }else{
+      cells[4]=fillCellNames(cells[4],row.DC_PMW); // merged cell → PMW day call only
+      cells[5]=fillCellNames(cells[5],row.SO);
+      cells[6]=fillCellNames(cells[6],row.NICU);
+      cells[7]=fillCellNames(cells[7],row.PICU);
+      cells[8]=fillCellNames(cells[8],row.PMW);
+    }
+    parts[pi]=cells.join("<w:tc>");
+  }
+
+  zip.file("word/document.xml",parts.join("<w:tr "));
+  const blob=await zip.generateAsync({type:"blob",mimeType:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");a.href=url;a.download="Block11_Schedule_Filled.docx";
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),3000);
+}
+
+// ── Resident Panel (shown on schedule page when a name badge is clicked) ──────
+function ResidentPanel({ name, sched, selected, setSelected, onClose, onDelete, onAddDC }) {
+  const profile = residentProfiles.find(r => r.name === name);
+  const level   = levelMap[name] || "";
+  const lc      = levelColors[level] || { hdr:"#1e293b", light:"#f8fafc", tx:"#334155" };
+  const [dcRecs, setDcRecs]       = React.useState(null);
+  const [dcSelected, setDcSelected] = React.useState(new Set());
+
+  const computeDCRecs = () => {
+    const recs = [];
+    const eligPMW  = !nicuUnit.has(name) && !picuUnit.has(name) && level !== "R4" && level !== "EXT";
+    const isSenior = level === "R3" || level === "R2";
+    const isJunior = level === "R1";
+    const eligNICU = nicuUnit.has(name) && (level === "R1" || level === "R2");
+
+    const isPostCall = (idx) => {
+      if (idx <= 0) return false;
+      const prev = sched[idx - 1];
+      return [...prev.SO, ...prev.NICU, ...prev.PICU, ...prev.PMW].includes(name);
+    };
+    const isVac = (date) => (vacationWeeks[name] || []).includes(getWeek(date));
+    const isUnwanted = (date) => (unwantedDays[name] || []).includes(date);
+
+    sched.forEach((row, idx) => {
+      const isWknd = row.day === "Fri" || row.day === "Sat" || row.day === "Thu";
+      if (eligPMW && isWknd) {
+        const dcArr = row.DC_PMW || [];
+        if (!dcArr.includes(name) && !isPostCall(idx) && !isVac(row.date) && !isUnwanted(row.date)) {
+          if (dcArr.length < dcSlotMax.DC_PMW) {
+            const hasSenior = dcArr.some(n => levelMap[n] === "R3" || levelMap[n] === "R2");
+            const hasJunior = dcArr.some(n => levelMap[n] === "R1");
+            const roleNeeded = isSenior ? !hasSenior : isJunior ? !hasJunior : true;
+            if (roleNeeded || dcArr.length < 2) {
+              recs.push({ date: row.date, day: row.day, slot: "DC_PMW",
+                reason: isSenior ? "Senior slot open" : isJunior ? "Junior slot open" : "Slot available" });
+            }
+          }
+        }
+      }
+      if (eligNICU && row.day === "Thu") {
+        const dcArr = row.DC_NICU || [];
+        if (!dcArr.includes(name) && !isPostCall(idx) && !isVac(row.date) && !isUnwanted(row.date)) {
+          if (dcArr.length < dcSlotMax.DC_NICU) {
+            recs.push({ date: row.date, day: row.day, slot: "DC_NICU", reason: "NICU day call slot open" });
+          }
+        }
+      }
+    });
+    setDcRecs(recs);
+    setDcSelected(new Set(recs.map((_, i) => i)));
+  };
+
+  const dateIdx = {};
+  sched.forEach((r, i) => { dateIdx[r.date] = i; });
+
+  const calls = sched.flatMap(row => {
+    let slot = null;
+    if (row.SO.includes(name))   slot = "SO";
+    if (row.NICU.includes(name)) slot = "NICU";
+    if (row.PICU.includes(name)) slot = "PICU";
+    if (row.PMW.includes(name))  slot = "PMW";
+    return slot ? [{ date: row.date, day: row.day, type: row.type, slot }] : [];
+  });
+  const dcCalls = sched.flatMap(row => {
+    const entries = [];
+    if ((row.DC_PMW||[]).includes(name)) entries.push({ date: row.date, day: row.day, type: row.type, slot: "DC_PMW", dc: true });
+    if ((row.DC_NICU||[]).includes(name)) entries.push({ date: row.date, day: row.day, type: row.type, slot: "DC_NICU", dc: true });
+    return entries;
+  });
+
+  const wdCount = calls.filter(c => c.type === "WD").length;
+  const weCount = calls.filter(c => c.type === "WE").length;
+
+  return (
+    <div onClick={e => e.stopPropagation()}
+      style={{ width:255, flexShrink:0, background:"#fff", borderRadius:8,
+        border:`2px solid ${lc.hdr}`, boxShadow:"0 4px 16px rgba(0,0,0,0.14)",
+        overflow:"hidden", position:"sticky", top:8, alignSelf:"flex-start" }}>
+
+      {/* Header */}
+      <div style={{ background:lc.hdr, padding:"8px 12px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+        <div>
+          <span style={{ fontSize:13, fontWeight:800, color:"#fff" }}>{name}</span>
+          <span style={{ fontSize:10, color:"#94a3b8", marginLeft:6 }}>{level} · {rotationMap[name] || "—"}</span>
+        </div>
+        <button onClick={onClose}
+          style={{ background:"none", border:"none", color:"#94a3b8", cursor:"pointer", fontSize:18, lineHeight:1, padding:"0 2px" }}>×</button>
+      </div>
+
+      {/* Call count */}
+      <div style={{ background:lc.light, padding:"4px 12px", fontSize:11, color:lc.tx, fontWeight:700,
+        borderBottom:`1px solid ${lc.hdr}33` }}>
+        {calls.length} call{calls.length !== 1 ? "s" : ""} · {wdCount} WD + {weCount} WE
+      </div>
+
+      {/* Profile tags */}
+      {profile && (
+        <div style={{ padding:"6px 10px", borderBottom:"1px solid #f1f5f9", display:"flex", flexWrap:"wrap", gap:4 }}>
+          {profile.vacation !== "None" && (
+            <span style={{ fontSize:10, background:"#fffbeb", border:"1px solid #fcd34d", color:"#92400e", borderRadius:3, padding:"1px 6px" }}>
+              📅 {profile.vacation}
+            </span>
+          )}
+          {profile.unwanted !== "None" && (
+            <span style={{ fontSize:10, background:"#fef2f2", border:"1px solid #fca5a5", color:"#dc2626", borderRadius:3, padding:"1px 6px" }}>
+              ⛔ {profile.unwanted}
+            </span>
+          )}
+          {profile.constraints.map((c, i) => (
+            <span key={i} style={{ fontSize:10, background:"#f0f9ff", border:"1px solid #bae6fd", color:"#0369a1", borderRadius:3, padding:"1px 6px" }}>
+              ⚠ {c}
+            </span>
+          ))}
+          {profile.notes && (
+            <span style={{ fontSize:10, background:"#f8fafc", border:"1px solid #e2e8f0", color:"#475569", borderRadius:3, padding:"1px 6px" }}>
+              📝 {profile.notes}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Call rows */}
+      <div style={{ maxHeight:360, overflowY:"auto" }}>
+        {calls.length === 0 ? (
+          <div style={{ padding:"10px 12px", fontSize:11, color:"#9ca3af", fontStyle:"italic" }}>No calls assigned.</div>
+        ) : calls.map((c, i) => {
+          const isActive = selected?.name === name && selected?.fromDate === c.date && selected?.fromSlot === c.slot;
+          const gapNum   = i === 0 ? null : (dateIdx[c.date] - dateIdx[calls[i-1].date]);
+          const gapOk    = gapNum === null || gapNum >= 4;
+          const gapWarn  = gapNum === 3;
+          const stc      = slotTagColors[slotLabel[c.slot]] || { bg:"#f1f5f9", tx:"#374151" };
+
+          return (
+            <div key={i}
+              onClick={() => setSelected({ name, fromDate:c.date, fromSlot:c.slot })}
+              title="Click to select this call for moving"
+              style={{
+                padding:"5px 10px", cursor:"pointer",
+                background: isActive ? "#fef9c3" : i % 2 === 0 ? "#fff" : "#f9fafb",
+                borderLeft: isActive ? "3px solid #ca8a04" : "3px solid transparent",
+                borderBottom:"1px solid #f1f5f9",
+                display:"flex", alignItems:"center", gap:5,
+                transition:"background 0.1s",
+              }}>
+              <span style={{ fontSize:9.5, color:"#9ca3af", width:14, textAlign:"center", fontWeight:700 }}>{i+1}</span>
+              <span style={{ fontSize:11, fontWeight:700, color:"#1e293b", minWidth:38 }}>{c.date}</span>
+              <span style={{ fontSize:10, color: c.type === "WE" ? "#0369a1" : "#6b7280",
+                fontWeight: c.type === "WE" ? 700 : 400, minWidth:26 }}>{c.day}</span>
+              <span style={{ fontSize:10, background:stc.bg, color:stc.tx, borderRadius:3,
+                padding:"1px 5px", fontWeight:600, flex:1, textAlign:"center" }}>{slotLabel[c.slot]}</span>
+              {gapNum !== null && (
+                <span style={{ fontSize:9.5, fontWeight:700, minWidth:22, textAlign:"right",
+                  color: gapOk ? "#166534" : gapWarn ? "#d97706" : "#dc2626" }}>
+                  {gapNum}d {gapOk ? "" : gapWarn ? "⚠️" : "❌"}
+                </span>
+              )}
+              {isActive && (
+                <span style={{ display:"flex", alignItems:"center", gap:3, flexShrink:0 }}>
+                  <span style={{ fontSize:9, color:"#ca8a04", fontWeight:800 }}>✦</span>
+                  <button
+                    onClick={e=>{e.stopPropagation();onDelete(c.date,c.slot);}}
+                    title="Remove this call"
+                    style={{ fontSize:9, fontWeight:700, color:"#dc2626", background:"#fef2f2",
+                      border:"1px solid #fca5a5", borderRadius:3, padding:"1px 5px",
+                      cursor:"pointer", lineHeight:1.4 }}>
+                    ✕ del
+                  </button>
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* DC Recommendations */}
+      {onAddDC && (() => {
+        const eligPMW = !nicuUnit.has(name) && !picuUnit.has(name) && level !== "R4" && level !== "EXT";
+        const eligNICU = nicuUnit.has(name) && (level === "R1" || level === "R2");
+        if (!eligPMW && !eligNICU) return null;
+        return (
+          <div style={{ borderTop:"2px solid #fcd34d", background:"#fffbeb" }}>
+            <div style={{ padding:"6px 10px 4px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <span style={{ fontSize:10, fontWeight:800, color:"#b45309", letterSpacing:"0.05em", textTransform:"uppercase" }}>
+                Day Call Recommendations
+              </span>
+              <button onClick={computeDCRecs}
+                style={{ fontSize:10, fontWeight:700, background:"#f59e0b", color:"#fff", border:"none",
+                  borderRadius:4, padding:"2px 8px", cursor:"pointer" }}>
+                ✦ Suggest
+              </button>
+            </div>
+            {dcRecs !== null && (
+              dcRecs.length === 0
+                ? <div style={{ padding:"4px 10px 8px", fontSize:10, color:"#9ca3af", fontStyle:"italic" }}>No eligible slots found.</div>
+                : <>
+                    <div style={{ maxHeight:180, overflowY:"auto" }}>
+                      {dcRecs.map((r, i) => (
+                        <div key={i} onClick={() => setDcSelected(s => {
+                          const ns = new Set(s);
+                          ns.has(i) ? ns.delete(i) : ns.add(i);
+                          return ns;
+                        })} style={{
+                          padding:"3px 10px", cursor:"pointer", display:"flex", alignItems:"center", gap:6,
+                          background: dcSelected.has(i) ? "#fef3c7" : "#fff",
+                          borderBottom:"1px solid #fde68a"
+                        }}>
+                          <input type="checkbox" readOnly checked={dcSelected.has(i)}
+                            style={{ accentColor:"#f59e0b", cursor:"pointer" }}/>
+                          <span style={{ fontSize:10.5, fontWeight:700, color:"#78350f", minWidth:44 }}>{r.date}</span>
+                          <span style={{ fontSize:10, color:"#6b7280", minWidth:22 }}>{r.day}</span>
+                          <span style={{ fontSize:10, background: r.slot==="DC_PMW"?"#fed7aa":"#cffafe",
+                            color: r.slot==="DC_PMW"?"#9a3412":"#155e75",
+                            border:`1px solid ${r.slot==="DC_PMW"?"#f97316":"#06b6d4"}`,
+                            borderRadius:3, padding:"0 5px", fontWeight:600 }}>{dcSlotLabel[r.slot]}</span>
+                          <span style={{ fontSize:9, color:"#a78bfa", marginLeft:"auto" }}>{r.reason}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ padding:"5px 10px", display:"flex", gap:6, justifyContent:"flex-end" }}>
+                      <button onClick={() => setDcSelected(new Set(dcRecs.map((_,i)=>i)))}
+                        style={{ fontSize:9.5, background:"none", border:"1px solid #d97706", color:"#b45309",
+                          borderRadius:3, padding:"1px 7px", cursor:"pointer" }}>All</button>
+                      <button onClick={() => setDcSelected(new Set())}
+                        style={{ fontSize:9.5, background:"none", border:"1px solid #d1d5db", color:"#6b7280",
+                          borderRadius:3, padding:"1px 7px", cursor:"pointer" }}>None</button>
+                      <button onClick={() => {
+                        const chosen = dcRecs.filter((_,i) => dcSelected.has(i));
+                        if (chosen.length) { onAddDC(chosen); setDcRecs(null); setDcSelected(new Set()); }
+                      }} style={{ fontSize:10, fontWeight:700, background:"#f59e0b", color:"#fff",
+                        border:"none", borderRadius:4, padding:"2px 10px", cursor:"pointer" }}>
+                        Add Selected ({dcSelected.size})
+                      </button>
+                    </div>
+                  </>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* Footer hint */}
+      <div style={{ padding:"4px 10px", background:"#f8fafc", borderTop:"1px solid #e2e8f0",
+        fontSize:9.5, color:"#9ca3af", textAlign:"center" }}>
+        Click a row to select it · then click a cell in the table to move
+      </div>
+    </div>
+  );
+}
+
+// ── Resident profiles ─────────────────────────────────────────────────────────
+const residentProfiles = [
+  {name:"Dina",        level:"R4",rotation:"ALL/IMM", vacation:"None",        unwanted:"Jul 31, Aug 1",          leaveBlock11:"None",constraints:["No Saturday","No Monday"],                                                       notes:"Reduced calls – leave Block 10"},
+  {name:"M.Khadhrawi", level:"R4",rotation:"OPD",     vacation:"None",        unwanted:"None",                   leaveBlock11:"None",constraints:["No Sun/Mon first 2 days of block"],                                             notes:""},
+  {name:"Mustafa",     level:"R4",rotation:"ALL/IMM", vacation:"None",        unwanted:"Jul 26, Aug 1",          leaveBlock11:"None",constraints:["No Monday"],                                                                    notes:""},
+  {name:"A.Musalllam", level:"R4",rotation:"OPD",     vacation:"None",        unwanted:"None",                   leaveBlock11:"None",constraints:["No Sun/Mon first 2 days of block"],                                             notes:""},
+  {name:"A.Qassab",    level:"R4",rotation:"GP",      vacation:"W2–W4",       unwanted:"None",                   leaveBlock11:"None",constraints:[],                                                                               notes:"Reduced to 2 calls (leave W2–W4)"},
+  {name:"H.Saif",      level:"R3",rotation:"CARDIO",  vacation:"None",        unwanted:"None",                   leaveBlock11:"None",constraints:["No Saturday","No Monday"],                       notes:""},
+  {name:"H.Jalood",    level:"R3",rotation:"ENDO",    vacation:"None",        unwanted:"None",                   leaveBlock11:"None",constraints:["No same day as Arwa (ENDO)"],                                                   notes:""},
+  {name:"H.Amrad",     level:"R3",rotation:"NICU",    vacation:"None",        unwanted:"None",                   leaveBlock11:"None",constraints:["No Saturday","No NICU slot same day as Z.Sairafi"],                            notes:"All 5 calls in Senior Overall (Option B)"},
+  {name:"Reem",        level:"R3",rotation:"PULMO",   vacation:"None",        unwanted:"None",                   leaveBlock11:"None",constraints:["No Sunday"],                                                                    notes:"Sat+Thu weekends (approved exception)"},
+  {name:"Safia",       level:"R3",rotation:"ID",      vacation:"W1+W2",       unwanted:"None",                   leaveBlock11:"None",constraints:[],                                                                               notes:"Reduced to 3 calls – W3+W4 available"},
+  {name:"Z.Sairafi",   level:"R3",rotation:"NICU",    vacation:"None",        unwanted:"None",                   leaveBlock11:"None",constraints:["No Saturday","No NICU slot same day as H.Amrad"],                              notes:"1 call PICU (Jul 5), 4 calls NICU"},
+  {name:"F.Saffar",    level:"R3",rotation:"PICU",    vacation:"None",        unwanted:"None",                   leaveBlock11:"None",constraints:["No Saturday","No same weekday as PICU colleagues"],                            notes:"1 call PICU, 4 calls Senior Overall"},
+  {name:"Sara",        level:"R3",rotation:"GP",      vacation:"None",        unwanted:"None",                   leaveBlock11:"None",constraints:[],                                                                               notes:"Last call Aug 1 in NICU"},
+  {name:"Arwa",        level:"R3",rotation:"ENDO/V",  vacation:"W1+W2",       unwanted:"None",                   leaveBlock11:"None",constraints:["No same day as H.Jalood (ENDO)"],                                              notes:"Reduced to 3 calls – W3+W4 available"},
+  {name:"A.Ibrahim",   level:"R3",rotation:"RESEARCH",vacation:"W3+W4",       unwanted:"None",                   leaveBlock11:"None",constraints:[],                                                                               notes:"Reduced to 3 calls – W1+W2 available"},
+  {name:"Sajad",       level:"R2",rotation:"NICU",    vacation:"None",        unwanted:"None",                   leaveBlock11:"None",constraints:["No Saturday","No same day as H.Amrad or Z.Sairafi"],                           notes:""},
+  {name:"Yasir",       level:"R2",rotation:"NICU",    vacation:"None",        unwanted:"Jul 10, Jul 11",         leaveBlock11:"None",constraints:["No Saturday","No same day as Sajad / H.Amrad / Z.Sairafi"],                   notes:"Jul 7 in PICU (avoids NICU conflict)"},
+  {name:"Shahad",      level:"R2",rotation:"PICU",    vacation:"W1+W2",       unwanted:"Jul 16–19, Jul 27–29",   leaveBlock11:"None",constraints:["No Saturday","No same weekday as F.Saffar or A.Darora"],                      notes:"Reduced to 3 calls; Thu/Fri sharing allowed"},
+  {name:"A.Darora",    level:"R2",rotation:"PICU",    vacation:"None",        unwanted:"None",                   leaveBlock11:"None",constraints:["No Saturday","No same weekday as Shahad or F.Saffar"],                        notes:"Jul 5 PMW (first-day priority); 4 PICU calls"},
+  {name:"Wasayif",     level:"R2",rotation:"OPD",     vacation:"W3+W4",       unwanted:"None",                   leaveBlock11:"None",constraints:["No Wednesday (preferred)"],                                                    notes:"Reduced to 3 calls – W1+W2 available"},
+  {name:"A.Rashid",    level:"R2",rotation:"HEMATO",  vacation:"None",        unwanted:"Jul 31, Aug 1",          leaveBlock11:"None",constraints:["No Jul 5, 6 (first 2 days)"],                                                 notes:""},
+  {name:"Qasim",       level:"R2",rotation:"GP",      vacation:"None",        unwanted:"No last weekend",        leaveBlock11:"None",constraints:["No Jul 30/31/Aug 1","Avoid Sara's call days"],                                 notes:"Covers NICU"},
+  {name:"H.Albaiek",   level:"R3",rotation:"GI",      vacation:"None",        unwanted:"None",                   leaveBlock11:"None",constraints:[],                                                                              notes:"5 NICU calls (Jul 9,14,19,24,28)"},
+  {name:"Abdulla",     level:"R2",rotation:"GP",      vacation:"W2+W3+W4",    unwanted:"No Sunday, No Monday",   leaveBlock11:"None",constraints:["No Sunday","No Monday"],                                                       notes:"1 call only – W1 available"},
+  {name:"Sajidah",     level:"R1",rotation:"NICU",    vacation:"None",        unwanted:"None",                   leaveBlock11:"None",constraints:["No Saturday","No first 3 days","No same weekday as A.Basarah or M.Hajji"],    notes:"6 calls; NICU+PMW mix"},
+  {name:"A.Dayin",     level:"R1",rotation:"PICU",    vacation:"None",        unwanted:"Jul 10, Jul 17",         leaveBlock11:"None",constraints:["No Saturday","No first 3 days","PICU colleagues only on Thu/Fri"],             notes:"6 calls"},
+  {name:"A.Basarah",   level:"R1",rotation:"NICU",    vacation:"None",        unwanted:"None",                   leaveBlock11:"None",constraints:["No Saturday","No first 3 days","No same weekday as Sajidah or M.Hajji"],      notes:"6 calls; 3-day exception Jul 13→16 approved"},
+  {name:"M.Hajji",     level:"R1",rotation:"NICU",    vacation:"None",        unwanted:"None",                   leaveBlock11:"None",constraints:["No Saturday","No first 3 days","No same weekday as Sajidah or A.Basarah"],    notes:"6 calls; all PMW"},
+  {name:"Z.Alwan",     level:"R1",rotation:"ANEST",   vacation:"W1+W3+W4",    unwanted:"Jul 12, Jul 13",         leaveBlock11:"None",constraints:["Outside rotation W3+W4"],                                                      notes:"1 call only – W2 available (Jul 16 Thu)"},
+  {name:"Z.Abdulmohsen",level:"R1",rotation:"ANEST",  vacation:"W1+W2",       unwanted:"None",                   leaveBlock11:"None",constraints:["Outside rotation W1+W2"],                                                      notes:"3 calls – W3+W4 available"},
+  {name:"Z.Aman",      level:"R1",rotation:"GP",      vacation:"W2+W3",       unwanted:"None",                   leaveBlock11:"None",constraints:[],                                                                               notes:"3 calls – W1+W4 available"},
+  {name:"Z.Madeh",     level:"R1",rotation:"GP",      vacation:"W3+W4",       unwanted:"Jul 17, Jul 18",         leaveBlock11:"None",constraints:[],                                                                               notes:"3 calls – W1+W2 available"},
+  {name:"Z.Madan",     level:"R1",rotation:"GP",      vacation:"W1+W2",       unwanted:"Jul 31, Aug 1",          leaveBlock11:"None",constraints:[],                                                                               notes:"3 calls – W3+W4 available"},
+  {name:"Anwar",       level:"R1",rotation:"GP",      vacation:"None",        unwanted:"Jul 8, Jul 9",           leaveBlock11:"None",constraints:["No Jul 8, 9"],                                                                 notes:"6 calls; 1 three-day gap exception"},
+  {name:"F.Ghanim",    level:"R1",rotation:"GP",      vacation:"None",        unwanted:"Jul 7, Jul 30/31/Aug 1", leaveBlock11:"None",constraints:["No last weekend"],                                                             notes:"6 calls; 1 three-day gap exception"},
+  {name:"S.Zaidani",   level:"R1",rotation:"GP",      vacation:"None",        unwanted:"Jul 5, Jul 6",           leaveBlock11:"None",constraints:["No Jul 5, 6"],                                                                 notes:"6 calls; 1 three-day gap exception"},
+  {name:"Musawi",      level:"EXT",rotation:"PEM",    vacation:"None",        unwanted:"None",                   leaveBlock11:"None",constraints:[],                                                                               notes:"External sub-rotator (PEM). Contact: 0542411366"},
+  {name:"Malak",       level:"EXT",rotation:"RHEUMA", vacation:"None",        unwanted:"None",                   leaveBlock11:"None",constraints:[],                                                                               notes:"External R4 sub-rotator (Rheumatology). Contact: malakayed1@outlook.com / 500585655"},
+  {name:"F.Hamood",      level:"EXT",rotation:"GP",     vacation:"None",        unwanted:"None",                   leaveBlock11:"None",constraints:[],                                                                               notes:"External FM R1 sub-rotator. Contact: 0583203530"},
+  {name:"O.Alsaihati",  level:"EXT",rotation:"GP",     vacation:"None",        unwanted:"None",                   leaveBlock11:"None",constraints:[],                                                                               notes:"External FM R1 sub-rotator. Contact: 0562419342"},
+];
+
+const levelColors={R4:{hdr:"#1e3a8a",light:"#dbeafe",tx:"#1e3a8a"},R3:{hdr:"#166534",light:"#dcfce7",tx:"#14532d"},R2:{hdr:"#92400e",light:"#fef3c7",tx:"#78350f"},R1:{hdr:"#6b21a8",light:"#f3e8ff",tx:"#581c87"},EXT:{hdr:"#9a3412",light:"#fed7aa",tx:"#7c2d12"}};
+const slotTagColors={"Senior Overall":{bg:"#eff6ff",tx:"#1e3a5f"},NICU:{bg:"#dbeafe",tx:"#1d4ed8"},PICU:{bg:"#fce7f3",tx:"#9d174d"},PMW:{bg:"#d1fae5",tx:"#065f46"}};
+
+function getTarget(name){
+  const p=residentProfiles.find(r=>r.name===name);
+  if(!p)return null;
+  const m=(p.notes||"").match(/(\d+)\s*calls?/i);
+  return m?parseInt(m[1]):null;
+}
+
+function ResidentTracker({sched,spotlight,setSpotlight,setSelected,setWarnings}){
+  const filled={};
+  const filledDC={};
+  sched.forEach(row=>{
+    [...row.SO,...row.NICU,...row.PICU,...row.PMW].forEach(name=>{
+      filled[name]=(filled[name]||0)+1;
+    });
+    [...(row.DC_PMW||[]),...(row.DC_NICU||[])].forEach(name=>{
+      filledDC[name]=(filledDC[name]||0)+1;
+    });
+  });
+  return(
+    <div onClick={e=>e.stopPropagation()} style={{
+      width:186,flexShrink:0,background:"#fff",borderRadius:8,
+      border:"1px solid #e2e8f0",boxShadow:"0 1px 4px rgba(0,0,0,0.06)",
+      overflow:"hidden",alignSelf:"flex-start",
+      display:"flex",flexDirection:"column",
+      maxHeight:"calc(100vh - 150px)",position:"sticky",top:8,
+    }}>
+      <div style={{background:"#1e293b",color:"#94a3b8",fontSize:9.5,fontWeight:700,
+        letterSpacing:"0.08em",textTransform:"uppercase",padding:"6px 10px",flexShrink:0}}>
+        👥 Resident Call Tracker
+      </div>
+      <div style={{overflowY:"auto",flex:1}}>
+        {["R4","R3","R2","R1","EXT"].map(lvl=>{
+          const lc=levelColors[lvl];
+          const group=residentProfiles.filter(r=>r.level===lvl);
+          return(
+            <div key={lvl}>
+              <div style={{background:lc.light,padding:"3px 9px",fontSize:9,fontWeight:800,
+                color:lc.hdr,borderTop:`1px solid ${lc.hdr}33`,borderBottom:`1px solid ${lc.hdr}33`,
+                letterSpacing:"0.08em",textTransform:"uppercase"}}>
+                {lvl}
+              </div>
+              {group.map(res=>{
+                const cur=filled[res.name]||0;
+                const tgt=getTarget(res.name);
+                const isLit=spotlight===res.name;
+                const pct=tgt?Math.min(cur/tgt,1.05):null;
+                const over=tgt&&cur>tgt;
+                const done=tgt&&cur>=tgt;
+                const barColor=over?"#ef4444":done?"#22c55e":lc.hdr;
+                return(
+                  <div key={res.name} onClick={()=>{
+                    const next=isLit?null:res.name;
+                    setSpotlight(next);setSelected(null);setWarnings([]);
+                  }} style={{
+                    padding:"5px 9px",cursor:"pointer",
+                    borderBottom:"1px solid #f1f5f9",
+                    background:isLit?lc.light:"transparent",
+                    borderLeft:`3px solid ${isLit?lc.hdr:"transparent"}`,
+                    transition:"all 0.1s",
+                  }}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <span style={{fontSize:10.5,fontWeight:isLit?800:600,
+                        color:isLit?lc.hdr:"#1e293b",lineHeight:1.2}}>{res.name}</span>
+                      <span style={{fontSize:10,fontWeight:700,
+                        color:over?"#dc2626":done?"#166534":"#64748b",
+                        background:over?"#fef2f2":done?"#dcfce7":"#f8fafc",
+                        border:`1px solid ${over?"#fca5a5":done?"#86efac":"#e2e8f0"}`,
+                        borderRadius:3,padding:"0 4px",lineHeight:"16px"}}>
+                        {cur}{tgt?`/${tgt}`:""}
+                      </span>
+                    </div>
+                    {tgt&&(
+                      <div style={{marginTop:3,height:3,borderRadius:2,background:"#f1f5f9",overflow:"hidden"}}>
+                        <div style={{height:"100%",borderRadius:2,background:barColor,
+                          width:`${Math.min(pct,1)*100}%`,transition:"width 0.25s"}}/>
+                      </div>
+                    )}
+                    {filledDC[res.name]>0&&(
+                      <div style={{marginTop:2,display:"flex",alignItems:"center",gap:3}}>
+                        <span style={{fontSize:8.5,fontWeight:700,color:"#b45309",background:"#fef3c7",
+                          border:"1px solid #fcd34d",borderRadius:3,padding:"0 4px",lineHeight:"14px"}}>
+                          +{filledDC[res.name]} DC
+                        </span>
+                        <span style={{fontSize:8,color:"#b45309",opacity:0.7}}>day call</span>
+                      </div>
+                    )}
+                    {isLit&&(
+                      <div style={{marginTop:3,fontSize:9,color:lc.tx,opacity:0.8}}>
+                        {res.rotation}{res.vacation!=="None"?` · 🏖 ${res.vacation}`:""}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{padding:"5px 9px",borderTop:"1px solid #f1f5f9",background:"#f8fafc",
+        fontSize:9,color:"#94a3b8",textAlign:"center",flexShrink:0}}>
+        Click resident → view &amp; edit calls
+      </div>
+    </div>
+  );
+}
+
+// ── Master Rota Page ─────────────────────────────────────────────────────────
+const BLOCK_DATES=[
+  {label:"B1",  greg:"28/9–25/10",  n:1,  sy:2025,sm:9, sd:28},
+  {label:"B2",  greg:"26/10–22/11", n:2,  sy:2025,sm:10,sd:26},
+  {label:"B3",  greg:"23/11–20/12", n:3,  sy:2025,sm:11,sd:23},
+  {label:"B4",  greg:"21/12–17/1",  n:4,  sy:2025,sm:12,sd:21},
+  {label:"B5",  greg:"18/1–14/2",   n:5,  sy:2026,sm:1, sd:18},
+  {label:"B6",  greg:"15/2–14/3",   n:6,  sy:2026,sm:2, sd:15},
+  {label:"B7",  greg:"15/3–11/4",   n:7,  sy:2026,sm:3, sd:15},
+  {label:"B8",  greg:"12/4–9/5",    n:8,  sy:2026,sm:4, sd:12},
+  {label:"B9",  greg:"10/5–6/6",    n:9,  sy:2026,sm:5, sd:10},
+  {label:"B10", greg:"7/6–4/7",     n:10, sy:2026,sm:6, sd:7},
+  {label:"B11", greg:"5/7–1/8",     n:11, sy:2026,sm:7, sd:5, current:true},
+  {label:"B12", greg:"2/8–29/8",    n:12, sy:2026,sm:8, sd:2},
+  {label:"B13", greg:"30/8–29/9",   n:13, sy:2026,sm:8, sd:30},
+];
+const BLOCK_VACATIONS={
+  1:{"Erum":["W3"],"H.Albaiek":["W1"]},
+  2:{"H.Albaiek":["W1"],"H.Saif":["W1"],"Arwa":["W4"]},
+  3:{"Arwa":["W1"],"Reem":["W2"]},
+  4:{"A.Ibrahim":["W3"],"Z.Madeh":["W4"],"Maab":["W2"],"Sajidah":["W1"],"Z.Alsaleh":["W2"],"A.Basarah":["W2"],"Z.Madan":["W3"],"Abdulla":["W1"],"Wasayif":["W4"],"Safa":["W3"]},
+  5:{"Safa":["W3"],"Sajidah":["W1"],"Dina":["W2","W3"],"Z.Madeh":["W1"],"Z.Abdulmohsen":["W3"],"Wasayif":["W1"],"Z.Alwan":["W1"],"Shahad":["W2"],"Sajad":["W2"],"Maab":["W1"]},
+  6:{"Maab":["W1"],"A.Darora":["W3"],"F.Saffar":["W4"],"S.Zaidani":["W3"],"Entisar":["W1"]},
+  7:{"Z.Abass":["W3"],"A.Dayin":["W3"],"Z.Aman":["W3"],"H.Jalood":["W3"],"Sara":["W2"],"H.Amrad":["W3"],"Z.Sairafi":["W3"],"M.Hajji":["W3"],"F.Ghanim":["W3"]},
+  8:{"F.Ghanim":["W1","W3"],"Z.Abass":["W1"],"Erum":["W1"],"Safia":["W4"],"Yasir":["W3"],"H.Albaiek":["W3"]},
+  9:{"Z.Khowaildi":["W1"],"H.Saif":["W1"],"H.Jalood":["W1"]},
+  10:{"Z.Alwan":["W4"],"A.Basarah":["W3"],"Anwar":["W3"],"A.Rashid":["W3"],"M.Hajji":["W1"],"F.Ghanim":["W3"],"H.Salman":["W1"]},
+  11:{"Safia":["W1","W2"],"Arwa":["W1","W2"],"A.Ibrahim":["W3","W4"],"Shahad":["W1","W2"],"Abdulla":["W2","W3","W4"],"Wasayif":["W3","W4"],"H.Salman":["W1","W2","W3","W4"],"Z.Madan":["W1","W2"],"Z.Aman":["W2","W3"],"Z.Alwan":["W1"],"Z.Madeh":["W3","W4"]},
+  12:{"Sajidah":["W1"],"Reem":["W2"],"S.Zaidani":["W3"],"Z.Sairafi":["W1"],"Anwar":["W3"],"Z.Alsaleh":["W2"],"Wasayif":["W1"],"H.Amrad":["W3"],"Qasim":["W2"],"A.Rashid":["W1"],"Z.Khowaildi":["W1"],"F.Saffar":["W2"],"Sajad":["W1"]},
+  13:{"Sajad":["W1"],"A.Dayin":["W3"],"Z.Abdulmohsen":["W3"],"A.Marzooq":["W1"],"F.Ghanim":["W4"],"Sara":["W3"],"Sajidah":["W3"],"A.Darora":["W3"],"Yasir":["W3"],"M.Khadhrawi":["W1","W2","W3","W4"],"Mustafa":["W1","W2","W3","W4"],"Dina":["W1","W2","W3","W4"],"A.Musalllam":["W1","W2","W3","W4"],"A.Qassab":["W1","W2","W3","W4"]},
+};
+const MASTER_ROTA=[
+  // R4
+  {name:"M.Khadhrawi", full:"Mohammed Mussa Al Khadhrawi",  lv:"R4", b:["ELECTIVE","ER","GP","NICU","GEN/MET","GP","RHEUMA","NEPHRO","PICU","ALL/IMM","OPD","ELECTIVE","V"]},
+  {name:"Mustafa",     full:"Mustafa Moh'd Al Shammasi",    lv:"R4", b:["NICU","PULMO","OPD","ER","GP/GI","NEPHRO","PICU","GEN/MET","GP","ELECTIVE","ALL/IMM","RHEUMA","V"]},
+  {name:"Dina",        full:"Dina A.Ghani Al Rumaih",       lv:"R4", b:["RHEUMA","DEVELOP","ER","NEPHRO","ELECTIVE","GP","NICU","PICU","GEN/MET","GP","ALL/IMM","OPD","V"]},
+  {name:"Dana",        full:"Dana Zaki Al Ghanim",           lv:"R4", b:["GP","NICU","OPD","PULMO","NEPHRO","PICU","GEN/MET","ER","ALL/IMM","GP","ELECTIVE","RHEUMA","V"]},
+  {name:"Hanan",       full:"Hanan Ghazi Sahwan",            lv:"R4", b:["DEVELOP","GP","NICU","RHEUMA","PICU","GEN/MET","ER","PULMO","GP","OPD","ELECTIVE","ALL/IMM","V"]},
+  {name:"A.Musalllam", full:"Ammar Ali Al Musalllam",        lv:"R4", b:["ER","ALL/IMM","GEN/MET","PICU","PULMO","ELECTIVE","GP","RHEUMA","NICU","GI","OPD","GP","V"]},
+  {name:"Rawan",       full:"Rawan Ali Al Muslim",            lv:"R4", b:["ALL/IMM","NEPHRO","PICU","GEN/MET","GP","NICU","ER","OPD","PULMO","RHEUMA","ELECTIVE","GP","V"]},
+  {name:"A.Qassab",    full:"Aqila Talib Al Qassab",         lv:"R4", b:["GEN/MET","PICU","NEPHRO","GP","NICU","OPD","PULMO","ELECTIVE","RHEUMA","ER","GP","ALL/IMM","V"]},
+  {name:"Jenan",       full:"Jenan Abdulla Al Muslim",        lv:"R4", b:["PICU","GEN/MET","RHEUMA","GP","ER","ALL/IMM","NEPHRO","NICU","GP","PULMO","ELECTIVE","OPD","V"]},
+  // R3
+  {name:"Arwa",        full:"Arwa Wdie Al Hawadir",           lv:"R3", b:["ER","ENDO/V","GI","RESEARCH","GP","ER","NICU","ELECTIVE","PICU","DEVELOP","ENDO/V","ID","GP"]},
+  {name:"F.Saffar",    full:"Fatimah Abdrub Al Saffar",       lv:"R3", b:["GI","ER","GP","DEVELOP","ELECTIVE","ENDO/V","ID","RESEARCH","NICU","ER","PICU","ENDO/GP","GP/V"]},
+  {name:"Z.Abass",     full:"Zahra Yasir Al Abass",           lv:"R3", b:["GP","RESEARCH","ER","GI/GP","NICU","ELECTIVE","V","ENDO","ID","DEVELOP","ER","PICU","GP/GI"]},
+  {name:"H.Saif",      full:"Hasan Hani Al Saif",             lv:"R3", b:["ENDO/V","GP","ELECTIVE","ER","RESEARCH","NICU","GI","ENDO/V","ER","DEVELOP","CARDIO","GP","PICU"]},
+  {name:"H.Amrad",     full:"Hasan Ali Al Amrad",             lv:"R3", b:["DEVELOP","ER","ID","PICU","GP","GI","GP/V","ELECTIVE","RESEARCH","ER","NICU","GP/V","ENDO"]},
+  {name:"Reem",        full:"Reem Reda Al Hujairi",           lv:"R3", b:["RESEARCH","NICU","GI/V","GP","ENDO","ER","GP","PICU","ER","DEVELOP","PULMO","GI/V","ID"]},
+  {name:"Safia",       full:"Safia Abdul Kareem Al Osaif",    lv:"R3", b:["ER","GP","DEVELOP","RESEARCH","ELECTIVE","GI","ENDO","ID/V","GP","PICU","ID/V","NICU","ER"]},
+  {name:"Z.Khowaildi", full:"Zahra Mohmd Al Khowaildi",       lv:"R3", b:["ID","DEVELOP","ER","GP","ER","ENDO","PICU","GI","GP/V","RESEARCH","ELECTIVE","GP/V","NICU"]},
+  {name:"H.Jalood",    full:"Hasan Haidar Al Jalood",         lv:"R3", b:["GP","ID","DEVELOP","ER","ELECTIVE","PICU","ENDO/V","ER","RESEARCH","NICU","ENDO/V","GP","GI"]},
+  {name:"Z.Sairafi",   full:"Zahra Reda Al Sairafi",          lv:"R3", b:["ENDO","PICU","RESEARCH","ELECTIVE","DEVELOP","ER","GP/V","ID","GP","GI","NICU","GP/V","ER"]},
+  {name:"Erum",        full:"Erum Ali Al Marhoon",            lv:"R3", b:["GP/V","ELECTIVE","ENDO","NICU","DEVELOP","RESEARCH","ER","GP/V","ID","PICU","ER","GI","GP"]},
+  {name:"Sara",        full:"Sara Abdulla Al Asfoor",         lv:"R3", b:["NICU","GI","PICU","ID","RESEARCH","ER","GP/V","ER","ENDO","ELECTIVE","GP","DEVELOP","GP/V"]},
+  {name:"A.Ibrahim",   full:"Ahmed Ali Ibrahim",              lv:"R3", b:["NICU","ENDO","ER","RESEA/V","ID","ER","PICU","DEVLOP","GI","GP","RESEA/V","NICU","GP"]},
+  {name:"H.Albaiek",   full:"Hawra Fawzi Al Baik",            lv:"R3", b:["GP/V","RESEARCH","GP","ENDO","ELECTIVE","ID","ER","GP/V","ER","NICU","GI","PICU","GI"]},
+  // R2
+  {name:"Safa",        full:"Safa Malik Shaheen",             lv:"R2", b:["GP","PICU","NEURO","RESEARCH","CARDIO/V","OPD","PICU","NICU","HEMATO","NICU","ER","CARDIO/V","GP"]},
+  {name:"Abdulla",     full:"Abdulla Mohmd Hajji",            lv:"R2", b:["NICU","CARDIO","PICU","GP/V","HEMATO","GP","OPD","RESEARCH","NICU","PICU","GP/V","ER","NEURO"]},
+  {name:"Qasim",       full:"Qasim A. Mohsen Al Zain",        lv:"R2", b:["ER","NICU","HEMATO","PICU","NICU","NEURO","ER","OPD","CARDIO","RESEARCH","GP","V","PICU"]},
+  {name:"Wasayif",     full:"Wasayif Salman Al Mghlaq",       lv:"R2", b:["ER","GP","NICU","RESEARCH","OPD/V","HEMATO","NEURO","GP","NICU","PICU","OPD/V","CARDIO","PICU"]},
+  {name:"Shahad",      full:"Shahad Mustafa Twailib",         lv:"R2", b:["PICU","RESEARCH","CARDIO","NICU","PICU/V","GP","NEURO","GP","HEMATO","OPD","PICU/V","NICU","ER"]},
+  {name:"Maab",        full:"Maab Sadiq Swailih",             lv:"R2", excl11:true, b:["PICU","GP","GP","OPD/V","OPD/V","NICU","RESEARCH","NEURO","ER","PICU","CARDIO","NICU","HEMATO"]},
+  {name:"Sajad",       full:"Sajad Monthir Al Momen",         lv:"R2", b:["GP","PICU","GP","ER","RES/V","OPD","NICU","PICU","NEURO","HEMATO","NICU","RES/V","CARDIO"]},
+  {name:"A.Rashid",    full:"Ahmad Khalid Al Rashid",         lv:"R2", b:["RESEARCH","NICU","PICU","GP","ER","NEURO","OPD","CARDIO","PICU","GP/V","HEMATO","GP/V","NICU"]},
+  {name:"A.Marzooq",   full:"Ali Ahmad Al Marzooq",           lv:"R2", excl11:true, b:["OPD","RESEARCH","NICU","CARDIO","PICU","GP","ER","NICU","GP","PICU","NEURO","HEMATO","V"]},
+  {name:"A.Darora",    full:"Aqila Mahdi Al Darora",          lv:"R2", b:["CARDIO","OPD","ER","NICU","GP/V","RESEARCH","HEMATO","NICU","PICU","GP","PICU","NEURO","GP/V"]},
+  {name:"H.Salman",    full:"Haidar Ali Al Salman",           lv:"R2", b:["HEMATO","GP","OPD","CARDIO","NICU","PICU","GP","ER","NEURO","RESEARCH","V","PICU","NICU"]},
+  {name:"Yasir",       full:"Yasir Ali Al Arab",              lv:"R2", b:["NEURO","HEMATO","GP","OPD","PICU","NICU","RESEARCH","GP/V","CARDIO","ER","NICU","PICU","GP/V"]},
+  // R1
+  {name:"A.Dayin",     full:"Ali Aldayin",                   lv:"R1", b:["NICU","GP","GP","WBC","GP","ANESSIM","GP/V","GP","ER","PHC","PICU","NICU","GP/V"]},
+  {name:"A.Basarah",   full:"Ammar Albasarah",               lv:"R1", b:["GP","WBC","GP","GP/V","ANESSIM","GP","GP","ER","PHC","GP/V","NICU","PICU","NICU"]},
+  {name:"Anwar",       full:"Anwar Alolaian",                lv:"R1", b:["WBC","GP","GP","ANESSIM","PHC","GP","PICU","ER","NICU","GP/V","GP","GP/V","NICU"]},
+  {name:"M.Hajji",     full:"Mohammed Alhajji",              lv:"R1", b:["GP","GP","ANESSIM","GP/V","PICU","ER","GP","WBC","NICU","GP/V","NICU","GP","PHC"]},
+  {name:"F.Ghanim",    full:"Fatimah Alghanim",              lv:"R1", b:["GP","GP","GP","PICU","ER","NICU","WBC","NICU","GP","ANES/V","GP","PHC","ANES/V"]},
+  {name:"Sajidah",     full:"Sajidah Almughassil",           lv:"R1", b:["WBC","GP","ER","GP","GP","PHC","ANES/V","NICU","PICU","GP","NICU","GP","ANES/V"]},
+  {name:"S.Zaidani",   full:"Sukainah Alzaidani",            lv:"R1", b:["GP","NICU","GP","PHC","ANES/V","GP","ER","GP","WBC","NICU","GP","ANES/V","PICU"]},
+  {name:"Z.Alwan",     full:"Zahra Alalwan",                 lv:"R1", b:["GP","GP","WBC","NICU","GP/V","GP","GP","PHC","NICU","GP/V","ANESSIM","PICU","ER"]},
+  {name:"Z.Madan",     full:"Zainab Almadan",                lv:"R1", b:["GP","ANESSIM","NICU","GP/V","NICU","GP","PHC","GP","PICU","WBC","GP/V","ER","GP"]},
+  {name:"Z.Madeh",     full:"Zainab Almadeh",                lv:"R1", b:["GP","NICU","PHC","GP/V","GP","NICU","PICU","GP","ANESSIM","ER","GP/V","WBC","GP"]},
+  {name:"Z.Alsaleh",   full:"Zainab Alsaleh",                lv:"R1", b:["GP","PHC","NICU","GP/V","GP","GP","NICU","ANESSIM","GP","PICU","ER","GP/V","WBC"]},
+  {name:"Z.Aman",      full:"Zahra Hassan Aman",             lv:"R1", b:["GP","GP","PHC","WBC","NICU","PICU","GP/V","GP","ANESSIM","GP","GP/V","ER","NICU"]},
+  {name:"Entisar",     full:"Entisar Alawami",               lv:"R1", b:["GP","ANESSIM","GP","ER","WBC","GP/V","GP","PICU","GP","NICU","PHC","GP/V","NICU"]},
+  {name:"Z.Abdulmohsen",full:"Zahra Abdulmohsen",            lv:"R1", b:["GP","WBC","GP","NICU","GP/V","PICU","NICU","PHC","GP","GP","ANESSIM","ER","GP/V"]},
+];
+
+function MasterRotaPage(){
+  const[search,setSearch]=useState("");
+  const[selectedBlock,setSelectedBlock]=useState(11);
+
+  function weekDates(bd){
+    const d=new Date(bd.sy,bd.sm-1,bd.sd);
+    const mo=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    return["W1","W2","W3","W4"].map((wk,i)=>{
+      const s=new Date(d.getTime()+i*7*86400000);
+      const e=new Date(s.getTime()+6*86400000);
+      const fmt=dt=>`${dt.getDate()} ${mo[dt.getMonth()]}`;
+      return{wk,label:`${fmt(s)} – ${fmt(e)}`};
+    });
+  }
+
+  function rotStyle(r){
+    if(!r||r==="V")return{bg:"#fef9c3",tx:"#854d0e"};
+    const base=r.replace("/V","").split("/")[0];
+    const m={
+      NICU:{bg:"#dbeafe",tx:"#1e3a8a"},PICU:{bg:"#fce7f3",tx:"#9d174d"},
+      GP:{bg:"#d1fae5",tx:"#065f46"},GI:{bg:"#dcfce7",tx:"#166534"},
+      ER:{bg:"#ffedd5",tx:"#9a3412"},ELECTIVE:{bg:"#f1f5f9",tx:"#64748b"},
+      RESEARCH:{bg:"#f3e8ff",tx:"#6b21a8"},RESEA:{bg:"#f3e8ff",tx:"#6b21a8"},
+      RES:{bg:"#f3e8ff",tx:"#6b21a8"},CARDIO:{bg:"#ffe4e6",tx:"#9f1239"},
+      DEVELOP:{bg:"#e0f2fe",tx:"#0369a1"},DEVLOP:{bg:"#e0f2fe",tx:"#0369a1"},
+      OPD:{bg:"#fef9c3",tx:"#a16207"},ENDO:{bg:"#ede9fe",tx:"#6d28d9"},
+      ID:{bg:"#fef3c7",tx:"#92400e"},HEMATO:{bg:"#fdf2f8",tx:"#9d174d"},
+      NEURO:{bg:"#f0f9ff",tx:"#0369a1"},PULMO:{bg:"#ecfdf5",tx:"#047857"},
+      ALL:{bg:"#f0fdf4",tx:"#166534"},GEN:{bg:"#e0f2fe",tx:"#0c4a6e"},
+      NEPHRO:{bg:"#fdf4ff",tx:"#7e22ce"},RHEUMA:{bg:"#fff1f2",tx:"#be123c"},
+      WBC:{bg:"#f8fafc",tx:"#334155"},PHC:{bg:"#fafaf9",tx:"#57534e"},
+      ANESSIM:{bg:"#f1f5f9",tx:"#374151"},ANES:{bg:"#f1f5f9",tx:"#374151"},
+    };
+    return m[base]||{bg:"#f8fafc",tx:"#475569"};
+  }
+
+  const lvColors2={
+    R4:{bg:"#dbeafe",tx:"#1e3a8a"},R3:{bg:"#dcfce7",tx:"#166534"},
+    R2:{bg:"#fef3c7",tx:"#78350f"},R1:{bg:"#f3e8ff",tx:"#581c87"},
+  };
+
+  const q=search.trim().toLowerCase();
+  const filtered=q
+    ?MASTER_ROTA.filter(r=>r.full.toLowerCase().includes(q)||r.name.toLowerCase().includes(q)||r.lv.toLowerCase()===q||r.b.some(x=>x.toLowerCase().includes(q)))
+    :MASTER_ROTA;
+
+  // per-block availability summary (not on full V, not excl11 for B11)
+  const blockSummary=BLOCK_DATES.map((_,bi)=>{
+    const c={R4:{a:0,t:0},R3:{a:0,t:0},R2:{a:0,t:0},R1:{a:0,t:0}};
+    MASTER_ROTA.forEach(res=>{
+      const lv=res.lv; if(!c[lv])return;
+      c[lv].t++;
+      if(res.b[bi]!=="V"&&!(bi===10&&res.excl11))c[lv].a++;
+    });
+    return c;
+  });
+
+  return(
+    <div style={{paddingBottom:20}}>
+      {/* Search */}
+      <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12,flexWrap:"wrap"}}>
+        <div style={{position:"relative",flex:1,minWidth:200}}>
+          <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:14,color:"#94a3b8"}}>🔍</span>
+          <input placeholder="Search by name, level (R3), or rotation (NICU, GI…)" value={search}
+            onChange={e=>setSearch(e.target.value)}
+            style={{width:"100%",padding:"8px 12px 8px 34px",fontSize:13,borderRadius:7,
+              border:"1.5px solid #cbd5e1",outline:"none",background:"#fff",boxSizing:"border-box"}}/>
+        </div>
+        {search&&<button onClick={()=>setSearch("")}
+          style={{padding:"7px 14px",borderRadius:6,border:"1px solid #cbd5e1",
+            background:"#f1f5f9",color:"#475569",cursor:"pointer",fontSize:12,fontWeight:600}}>✕ Clear</button>}
+        <span style={{fontSize:11,color:"#64748b"}}>{filtered.length} residents</span>
+      </div>
+
+      {/* ── Block Weekly On-Call Availability (dynamic) ── */}
+      {!q&&(()=>{
+        const bd=BLOCK_DATES.find(b=>b.n===selectedBlock)||BLOCK_DATES[10];
+        const wks=weekDates(bd);
+        const lvOrder2=["R4","R3","R2","R1"];
+        const lvColors2={R4:{bg:"#dbeafe",tx:"#1e3a8a"},R3:{bg:"#dcfce7",tx:"#166534"},R2:{bg:"#fef3c7",tx:"#78350f"},R1:{bg:"#f3e8ff",tx:"#581c87"}};
+        const bvac=BLOCK_VACATIONS[selectedBlock]||{};
+        const allRes=Object.entries(levelMap).map(([name,lv])=>({name,lv}));
+        const weeks=wks.map(({wk,label})=>{
+          const counts={};
+          lvOrder2.forEach(lv=>counts[lv]={avail:[],onvac:[]});
+          allRes.forEach(({name,lv})=>{
+            if(!counts[lv])return;
+            if((bvac[name]||[]).includes(wk))counts[lv].onvac.push(name);
+            else counts[lv].avail.push(name);
+          });
+          return{wk,label,counts};
+        });
+        return(
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:10,fontWeight:700,color:"#1e293b",marginBottom:8,
+              display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+              <span style={{background:bd.current?"#1e3a5f":"#334155",color:bd.current?"#93c5fd":"#94a3b8",
+                padding:"2px 10px",borderRadius:4,fontSize:11,fontWeight:800}}>{bd.label}</span>
+              <span style={{color:"#64748b",fontSize:10,textTransform:"uppercase",letterSpacing:"0.05em"}}>
+                On-Call Availability by Week — {bd.greg}
+              </span>
+              {bd.current&&<span style={{fontSize:9,background:"#dcfce7",color:"#166534",padding:"1px 6px",borderRadius:3,fontWeight:700}}>CURRENT BLOCK</span>}
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
+              {weeks.map(({wk,label,counts})=>(
+                <div key={wk} style={{background:"#fff",borderRadius:9,border:"1px solid #e2e8f0",
+                  boxShadow:"0 1px 3px rgba(0,0,0,0.06)",overflow:"hidden"}}>
+                  <div style={{background:"#1e293b",padding:"7px 12px"}}>
+                    <div style={{color:"#fff",fontWeight:800,fontSize:12}}>{wk}</div>
+                    <div style={{color:"#64748b",fontSize:9,marginTop:1}}>{label}</div>
+                  </div>
+                  <div style={{padding:"10px 12px"}}>
+                    {lvOrder2.map(lv=>{
+                      const c=counts[lv];
+                      const total=c.avail.length+c.onvac.length;
+                      const ls=lvColors2[lv];
+                      const pct=total?Math.round(c.avail.length/total*100):100;
+                      return(
+                        <div key={lv} style={{marginBottom:8}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
+                            <span style={{background:ls.bg,color:ls.tx,padding:"1px 6px",borderRadius:3,fontSize:9.5,fontWeight:700}}>{lv}</span>
+                            <span style={{fontSize:11,fontWeight:800,
+                              color:pct===100?"#16a34a":pct>=75?"#d97706":"#dc2626"}}>
+                              {c.avail.length}<span style={{color:"#94a3b8",fontWeight:400,fontSize:9}}>/{total}</span>
+                            </span>
+                          </div>
+                          <div style={{background:"#f1f5f9",borderRadius:99,height:3,overflow:"hidden",marginBottom:3}}>
+                            <div style={{width:`${pct}%`,height:"100%",borderRadius:99,
+                              background:pct===100?"#16a34a":pct>=75?"#f59e0b":"#ef4444"}}/>
+                          </div>
+                          {c.onvac.length>0&&(
+                            <div style={{fontSize:8.5,color:"#92400e",marginTop:2,lineHeight:1.4}}>
+                              🏖 {c.onvac.join(", ")}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                    <div style={{borderTop:"1px solid #f1f5f9",paddingTop:6,marginTop:2}}>
+                      <div style={{display:"flex",justifyContent:"space-between",fontSize:10.5,fontWeight:700}}>
+                        <span style={{color:"#64748b"}}>Total</span>
+                        <span style={{color:"#1e293b"}}>
+                          {lvOrder2.reduce((sum,lv)=>sum+counts[lv].avail.length,0)}
+                          <span style={{color:"#94a3b8",fontWeight:400,fontSize:9}}>
+                            /{lvOrder2.reduce((sum,lv)=>sum+counts[lv].avail.length+counts[lv].onvac.length,0)}
+                          </span>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Block availability summary — click any block to see its weekly breakdown */}
+      {!q&&(
+        <div style={{marginBottom:14,overflowX:"auto"}}>
+          <div style={{fontSize:10,fontWeight:700,color:"#64748b",marginBottom:5,textTransform:"uppercase",letterSpacing:"0.05em"}}>
+            Available per block — click any block to see weekly breakdown ↑
+          </div>
+          <table style={{borderCollapse:"collapse",fontSize:10}}>
+            <thead>
+              <tr>
+                <th style={{padding:"4px 10px",background:"#1e293b",color:"#94a3b8",textAlign:"left",minWidth:36,fontWeight:600}}>Lvl</th>
+                {BLOCK_DATES.map((bd,bi)=>{
+                  const isSel=bd.n===selectedBlock;
+                  const isCurr=bd.current;
+                  return(
+                    <th key={bi} onClick={()=>setSelectedBlock(bd.n)}
+                      style={{padding:"4px 7px",textAlign:"center",minWidth:50,cursor:"pointer",
+                        background:isSel?"#1e3a5f":isCurr?"#1a2e4a":"#1e293b",
+                        color:isSel?"#93c5fd":isCurr?"#60a5fa":"#64748b",
+                        fontWeight:isSel||isCurr?800:600,
+                        borderLeft:isSel?"2px solid #3b82f6":"1px solid #334155",
+                        borderRight:isSel?"2px solid #3b82f6":"none",
+                        outline:isSel?"none":"none",
+                        transition:"background 0.15s"}}>
+                      {bd.label}
+                      {isCurr&&!isSel&&<div style={{fontSize:7,color:"#60a5fa"}}>NOW</div>}
+                      {isSel&&<div style={{fontSize:7,color:"#93c5fd"}}>▼ VIEW</div>}
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {["R4","R3","R2","R1"].map(lv=>{
+                const ls=lvColors2[lv];
+                return(
+                  <tr key={lv}>
+                    <td style={{padding:"4px 10px",background:ls.bg}}>
+                      <span style={{fontWeight:700,fontSize:10,color:ls.tx}}>{lv}</span>
+                    </td>
+                    {blockSummary.map((cnt,bi)=>{
+                      const c=cnt[lv];
+                      const pct=c.t?c.a/c.t:1;
+                      const color=pct>=0.9?"#16a34a":pct>=0.7?"#d97706":"#dc2626";
+                      const isSel=BLOCK_DATES[bi].n===selectedBlock;
+                      const isCurr=BLOCK_DATES[bi].current;
+                      return(
+                        <td key={bi} onClick={()=>setSelectedBlock(BLOCK_DATES[bi].n)}
+                          style={{padding:"4px 5px",textAlign:"center",cursor:"pointer",
+                            background:isSel?"#eff6ff":isCurr?"#f8faff":"transparent",
+                            borderLeft:isSel?"2px solid #3b82f6":"1px solid #f1f5f9",
+                            borderRight:isSel?"2px solid #3b82f6":"none",
+                            fontWeight:isSel?800:600,color,fontSize:10.5,
+                            transition:"background 0.15s"}}>
+                          {c.a}/{c.t}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Main rota table */}
+      <div style={{borderRadius:8,border:"1px solid #e2e8f0",overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+        <div style={{overflowX:"auto"}}>
+          <table style={{borderCollapse:"collapse",fontSize:10.5,minWidth:980}}>
+            <thead>
+              <tr>
+                <th style={{padding:"8px 10px",background:"#1e293b",color:"#fff",fontWeight:700,
+                  textAlign:"left",minWidth:110,whiteSpace:"nowrap"}}>Name</th>
+                <th style={{padding:"8px 6px",background:"#1e293b",color:"#94a3b8",fontWeight:600,
+                  textAlign:"center",width:36}}>Lvl</th>
+                {BLOCK_DATES.map((bd,bi)=>(
+                  <th key={bi} style={{
+                    padding:bd.current?"8px 6px":"6px 6px",
+                    background:bd.current?"#1e3a5f":"#1e293b",
+                    color:bd.current?"#93c5fd":"#64748b",fontWeight:bd.current?800:600,
+                    textAlign:"center",minWidth:62,
+                    borderLeft:bd.current?"2px solid #3b82f6":"1px solid #334155",
+                    borderRight:bd.current?"2px solid #3b82f6":"none",fontSize:10}}>
+                    {bd.label}
+                    {bd.current&&<div style={{fontSize:8,color:"#93c5fd"}}>5/7–1/8</div>}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length===0&&(
+                <tr><td colSpan={15} style={{padding:"24px",textAlign:"center",color:"#94a3b8",fontSize:13}}>
+                  No residents match "{search}"
+                </td></tr>
+              )}
+              {(()=>{
+                const rows=[];let lastLv=null;let idx=0;
+                filtered.forEach(res=>{
+                  if(res.lv!==lastLv){
+                    lastLv=res.lv;idx=0;
+                    const ls=lvColors2[res.lv]||{bg:"#f1f5f9",tx:"#475569"};
+                    rows.push(
+                      <tr key={"hdr-"+res.lv}>
+                        <td colSpan={15} style={{padding:"5px 12px",background:ls.bg,color:ls.tx,
+                          fontWeight:800,fontSize:11,letterSpacing:"0.06em",
+                          borderTop:"2px solid #e2e8f0",textTransform:"uppercase"}}>
+                          {res.lv} — {MASTER_ROTA.filter(r=>r.lv===res.lv).length} residents
+                        </td>
+                      </tr>
+                    );
+                  }
+                  const rowBg=(idx++)%2===0?"#fff":"#f8fafc";
+                  const ls=lvColors2[res.lv]||{bg:"#f1f5f9",tx:"#475569"};
+                  rows.push(
+                    <tr key={res.name} style={{background:rowBg}}>
+                      <td style={{padding:"5px 10px",fontWeight:600,color:"#1e293b",
+                        whiteSpace:"nowrap",borderRight:"1px solid #e2e8f0"}}>
+                        {res.name}
+                        <div style={{fontSize:8.5,color:"#94a3b8",fontWeight:400}}>{res.full}</div>
+                        {res.excl11&&<span style={{fontSize:8,color:"#ef4444",fontWeight:600,
+                          background:"#fee2e2",padding:"1px 4px",borderRadius:2}}>excl. on-call B11</span>}
+                      </td>
+                      <td style={{padding:"5px 4px",textAlign:"center"}}>
+                        <span style={{background:ls.bg,color:ls.tx,padding:"2px 4px",
+                          borderRadius:3,fontSize:9,fontWeight:700}}>{res.lv}</span>
+                      </td>
+                      {res.b.map((rot,bi)=>{
+                        const s=rotStyle(rot);
+                        const isCurr=BLOCK_DATES[bi].current;
+                        const hasVac=rot!=="V"&&rot.includes("/V");
+                        const display=rot==="V"?"V":rot.replace("/V","");
+                        return(
+                          <td key={bi} style={{padding:"4px 5px",textAlign:"center",
+                            background:rot==="V"?"#fef9c3":isCurr?"#eff6ff":s.bg,
+                            borderLeft:isCurr?"2px solid #3b82f6":"1px solid #f1f5f9",
+                            borderRight:isCurr?"2px solid #3b82f6":"none",
+                            borderBottom:"1px solid #f1f5f9"}}>
+                            <span style={{fontSize:9,fontWeight:isCurr?800:600,
+                              color:rot==="V"?"#854d0e":s.tx,whiteSpace:"nowrap"}}>
+                              {rot==="V"?"🏖":""}
+                              {display}
+                              {hasVac&&<span style={{fontSize:7.5,opacity:0.75}}>🏖</span>}
+                            </span>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                });
+                return rows;
+              })()}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div style={{marginTop:10,display:"flex",flexWrap:"wrap",gap:4,fontSize:9.5}}>
+        {[["NICU","#dbeafe","#1e3a8a"],["PICU","#fce7f3","#9d174d"],["GP","#d1fae5","#065f46"],
+          ["GI","#dcfce7","#166534"],["ER","#ffedd5","#9a3412"],["CARDIO","#ffe4e6","#9f1239"],
+          ["ENDO","#ede9fe","#6d28d9"],["RESEARCH","#f3e8ff","#6b21a8"],["DEVELOP","#e0f2fe","#0369a1"],
+          ["ELECTIVE","#f1f5f9","#64748b"],["OPD","#fef9c3","#a16207"],["🏖 Vacation","#fef9c3","#854d0e"],
+        ].map(([lbl,bg,tx])=>(
+          <span key={lbl} style={{background:bg,color:tx,padding:"2px 6px",borderRadius:3,fontWeight:600}}>{lbl}</span>
+        ))}
+        <span style={{color:"#94a3b8",alignSelf:"center",fontSize:9}}>· /🏖 = partial vacation block</span>
+      </div>
+    </div>
+  );
+}
+
+function ResidentsPage({sched}){
+  const dateIdx={};sched.forEach((r,i)=>{dateIdx[r.date]=i;});
+
+  function getCalls(name){
+    return sched.flatMap(row=>{
+      let slot=null;
+      if(row.SO.includes(name))slot="Senior Overall";
+      if(row.NICU.includes(name))slot="NICU";
+      if(row.PICU.includes(name))slot="PICU";
+      if(row.PMW.includes(name))slot="PMW";
+      return slot?[{date:row.date,day:row.day,type:row.type,slot}]:[];
+    });
+  }
+
+  const levels=["R4","R3","R2","R1"];
+
+  return(
+    <div style={{padding:"0 0 24px"}}>
+      {levels.map(lvl=>{
+        const group=residentProfiles.filter(r=>r.level===lvl);
+        const lc=levelColors[lvl];
+        return(
+          <div key={lvl}>
+            <div style={{margin:"20px 0 10px",paddingBottom:4,borderBottom:`3px solid ${lc.hdr}`,display:"flex",alignItems:"center",gap:8}}>
+              <span style={{background:lc.hdr,color:"#fff",borderRadius:4,padding:"2px 10px",fontSize:13,fontWeight:800}}>{lvl}</span>
+              <span style={{fontSize:13,fontWeight:700,color:lc.tx}}>Residents</span>
+            </div>
+
+            {group.map(res=>{
+              const calls=getCalls(res.name);
+              const dcCalls=sched.flatMap(row=>{
+                const entries=[];
+                if((row.DC_PMW||[]).includes(res.name))entries.push({date:row.date,day:row.day,type:row.type,slot:"DC_PMW"});
+                if((row.DC_NICU||[]).includes(res.name))entries.push({date:row.date,day:row.day,type:row.type,slot:"DC_NICU"});
+                return entries;
+              });
+              const wdCount=calls.filter(c=>c.type==="WD").length;
+              const weCount=calls.filter(c=>c.type==="WE").length;
+
+              return(
+                <div key={res.name} style={{background:"#fff",borderRadius:8,border:`1px solid ${lc.light}`,marginBottom:10,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+                  {/* Resident header */}
+                  <div style={{background:lc.light,padding:"8px 14px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",borderBottom:`1px solid ${lc.hdr}22`}}>
+                    <span style={{fontSize:14,fontWeight:800,color:lc.hdr}}>{res.name}</span>
+                    <span style={{fontSize:11,fontWeight:600,color:lc.tx,background:"#fff",borderRadius:3,padding:"1px 7px",border:`1px solid ${lc.hdr}44`}}>{res.level}</span>
+                    <span style={{fontSize:11,fontWeight:600,color:lc.tx,background:"#fff",borderRadius:3,padding:"1px 7px",border:`1px solid ${lc.hdr}44`}}>{res.rotation}</span>
+                    <span style={{marginLeft:"auto",fontSize:11,fontWeight:700,color:lc.tx}}>{calls.length} call{calls.length!==1?"s":""} · {wdCount}WD + {weCount}WE</span>
+                  </div>
+
+                  <div style={{padding:"8px 14px"}}>
+                    {/* Info tags */}
+                    <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+                      {res.vacation!=="None"&&(
+                        <span style={{fontSize:11,background:"#fffbeb",border:"1px solid #fcd34d",color:"#92400e",borderRadius:4,padding:"2px 8px"}}>📅 Vacation: {res.vacation}</span>
+                      )}
+                      {res.unwanted!=="None"&&(
+                        <span style={{fontSize:11,background:"#fef2f2",border:"1px solid #fca5a5",color:"#dc2626",borderRadius:4,padding:"2px 8px"}}>⛔ Unwanted: {res.unwanted}</span>
+                      )}
+                      {res.leaveBlock11!=="None"&&(
+                        <span style={{fontSize:11,background:"#fff7ed",border:"1px solid #fdba74",color:"#c2410c",borderRadius:4,padding:"2px 8px"}}>📋 Leave: {res.leaveBlock11}</span>
+                      )}
+                      {res.constraints.map((c,i)=>(
+                        <span key={i} style={{fontSize:11,background:"#f0f9ff",border:"1px solid #bae6fd",color:"#0369a1",borderRadius:4,padding:"2px 8px"}}>⚠ {c}</span>
+                      ))}
+                      {res.notes&&(
+                        <span style={{fontSize:11,background:"#f8fafc",border:"1px solid #e2e8f0",color:"#475569",borderRadius:4,padding:"2px 8px"}}>📝 {res.notes}</span>
+                      )}
+                    </div>
+
+                    {/* Calls table */}
+                    {calls.length===0?(
+                      <div style={{fontSize:11,color:"#9ca3af",fontStyle:"italic"}}>No calls assigned in current schedule.</div>
+                    ):(
+                      <table style={{width:"100%",borderCollapse:"collapse",fontSize:11.5}}>
+                        <thead>
+                          <tr style={{background:lc.hdr}}>
+                            {["#","Date","Day","Type","Slot","Gap","Status"].map(h=>(
+                              <th key={h} style={{padding:"4px 8px",color:"#fff",fontWeight:700,textAlign:"left",borderRight:"1px solid rgba(255,255,255,0.15)",whiteSpace:"nowrap"}}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {calls.map((c,i)=>{
+                            const gapNum=i===0?null:(dateIdx[c.date]-dateIdx[calls[i-1].date]);
+                            const gapTxt=i===0?"—":`${gapNum}d`;
+                            const gapOk=gapNum===null||gapNum>=4;
+                            const gapWarn=gapNum===3;
+                            const statusIcon=i===0?"—":gapOk?"✅":gapWarn?"⚠️ 3d":"❌";
+                            const stc=slotTagColors[c.slot]||{bg:"#f1f5f9",tx:"#374151"};
+                            return(
+                              <tr key={i} style={{background:i%2===0?"#fff":"#f9fafb",borderBottom:"1px solid #e5e7eb"}}>
+                                <td style={{padding:"3px 8px",color:"#6b7280",textAlign:"center"}}>{i+1}</td>
+                                <td style={{padding:"3px 8px",fontWeight:700,color:"#1e293b"}}>{c.date}</td>
+                                <td style={{padding:"3px 8px",color:"#374151"}}>{c.day}</td>
+                                <td style={{padding:"3px 8px",color:c.type==="WE"?"#0369a1":"#374151",fontWeight:c.type==="WE"?600:400}}>{c.type==="WE"?"Weekend":"Weekday"}</td>
+                                <td style={{padding:"3px 8px"}}><span style={{background:stc.bg,color:stc.tx,borderRadius:3,padding:"1px 6px",fontWeight:600,fontSize:11}}>{c.slot}</span></td>
+                                <td style={{padding:"3px 8px",fontWeight:700,color:gapOk?"#166534":gapWarn?"#d97706":"#dc2626",textAlign:"center"}}>{gapTxt}</td>
+                                <td style={{padding:"3px 8px",textAlign:"center"}}>{statusIcon}</td>
+                              </tr>
+                            );
+                          })}
+                          <tr style={{background:lc.light,borderTop:`2px solid ${lc.hdr}33`}}>
+                            <td colSpan={2} style={{padding:"3px 8px",fontWeight:700,color:lc.tx}}>Total</td>
+                            <td colSpan={2} style={{padding:"3px 8px",fontWeight:700,color:lc.tx,textAlign:"center"}}>{calls.length} call{calls.length!==1?"s":""}</td>
+                            <td style={{padding:"3px 8px",fontWeight:600,color:lc.tx,textAlign:"center"}}>{wdCount}WD + {weCount}WE</td>
+                            <td colSpan={2} style={{padding:"3px 8px",textAlign:"center"}}>{calls.length>0?"✅":""}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    )}
+                    {dcCalls.length>0&&(
+                      <div style={{marginTop:12}}>
+                        <div style={{fontSize:10,fontWeight:800,color:"#b45309",letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:4,display:"flex",alignItems:"center",gap:6}}>
+                          Day Calls (07:30–15:00)
+                          <span style={{background:"#fef3c7",color:"#b45309",border:"1px solid #fcd34d",borderRadius:3,padding:"0 5px",fontSize:9.5,fontWeight:700}}>{dcCalls.length}</span>
+                        </div>
+                        <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                          <thead><tr style={{background:"#b45309"}}>
+                            {["#","Date","Day","Slot"].map(h=>(
+                              <th key={h} style={{padding:"3px 8px",color:"#fff",fontWeight:700,textAlign:"left",borderRight:"1px solid rgba(255,255,255,0.15)"}}>{h}</th>
+                            ))}
+                          </tr></thead>
+                          <tbody>
+                            {dcCalls.map((c,i)=>(
+                              <tr key={i} style={{background:i%2===0?"#fffbeb":"#fef3c7",borderBottom:"1px solid #fde68a"}}>
+                                <td style={{padding:"3px 8px",color:"#6b7280",textAlign:"center"}}>{i+1}</td>
+                                <td style={{padding:"3px 8px",fontWeight:700,color:"#78350f"}}>{c.date}</td>
+                                <td style={{padding:"3px 8px",color:"#92400e"}}>{c.day}</td>
+                                <td style={{padding:"3px 8px"}}><span style={{background:"#fed7aa",color:"#9a3412",borderRadius:3,padding:"1px 6px",fontWeight:600,fontSize:10,border:"1px solid #f97316"}}>{dcSlotLabel[c.slot]||c.slot}</span></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function AvailabilityPanel({sched}){
+  const[expanded,setExpanded]=React.useState(null);
+  const lvOrder=["R4","R3","R2","R1"];
+  const lvColors={R4:{dot:"#1e3a8a"},R3:{dot:"#166534"},R2:{dot:"#92400e"},R1:{dot:"#6b21a8"}};
+  const units=[
+    {key:"nicu",label:"NICU",totKey:"nicuTot",hdr:"#1d4ed8",light:"#dbeafe"},
+    {key:"picu",label:"PICU",totKey:"picuTot",hdr:"#9d174d",light:"#fce7f3"},
+    {key:"gp",  label:"GP / PMW",totKey:"gpTot", hdr:"#065f46",light:"#d1fae5"},
+  ];
+  function chip(avail,total,postCall,vacation){
+    const pct=total?avail/total:1;
+    const sc=pct>=0.75?"#166534":pct>=0.5?"#b45309":"#991b1b";
+    const sb=pct>=0.75?"#dcfce7":pct>=0.5?"#fef3c7":"#fef2f2";
+    const parts=[];
+    if(postCall.length)parts.push(`Post-call: ${postCall.join(", ")}`);
+    if(vacation.length)parts.push(`Vacation: ${vacation.join(", ")}`);
+    return{sc,sb,tip:parts.join(" | ")||"All available"};
+  }
+  return(
+    <div onClick={e=>e.stopPropagation()} style={{
+      width:210,flexShrink:0,background:"#fff",borderRadius:8,
+      border:"1px solid #e2e8f0",boxShadow:"0 1px 4px rgba(0,0,0,0.06)",
+      overflow:"hidden",alignSelf:"flex-start",display:"flex",flexDirection:"column",
+      maxHeight:"calc(100vh - 140px)",position:"sticky",top:8
+    }}>
+      <div style={{background:"#1e293b",color:"#94a3b8",fontSize:9.5,fontWeight:700,
+        letterSpacing:"0.08em",textTransform:"uppercase",padding:"6px 10px",flexShrink:0}}>
+        📊 Next-Day Availability
+      </div>
+      <div style={{fontSize:9,color:"#94a3b8",padding:"4px 10px",background:"#f8fafc",
+        borderBottom:"1px solid #e2e8f0",flexShrink:0}}>
+        Click a day to see per-unit breakdown by level
+      </div>
+      <div style={{overflowY:"auto",flex:1}}>
+        {sched.slice(0,-1).map((row,i)=>{
+          const av=getAvailability(sched,i+1);
+          if(!av)return null;
+          const next=sched[i+1];
+          const isOpen=expanded===i;
+          return(
+            <div key={row.date} style={{borderBottom:"1px solid #f1f5f9"}}>
+              <div onClick={()=>setExpanded(isOpen?null:i)} style={{
+                display:"flex",alignItems:"center",justifyContent:"space-between",
+                padding:"5px 8px",cursor:"pointer",
+                background:isOpen?"#f0f9ff":"#fff",
+                borderLeft:isOpen?"3px solid #0284c7":"3px solid transparent",
+                transition:"background 0.1s"
+              }}>
+                <div style={{fontSize:9.5,fontWeight:700,color:isOpen?"#0369a1":"#1e293b"}}>
+                  {row.date}<span style={{color:"#94a3b8",fontWeight:400,margin:"0 3px"}}>→</span>{next.date}
+                </div>
+                <div style={{display:"flex",gap:3,alignItems:"center"}}>
+                  {units.map(u=>{
+                    const t=av[u.totKey];
+                    const pct=t.total?t.avail/t.total:1;
+                    const sc=pct>=0.75?"#166534":pct>=0.5?"#b45309":"#991b1b";
+                    const sb=pct>=0.75?"#dcfce7":pct>=0.5?"#fef3c7":"#fef2f2";
+                    return(
+                      <span key={u.key} style={{fontSize:8.5,fontWeight:700,color:sc,background:sb,
+                        borderRadius:3,padding:"0 4px",border:`1px solid ${sc}44`,lineHeight:"16px"}}>
+                        {t.avail}/{t.total}
+                      </span>
+                    );
+                  })}
+                  <span style={{fontSize:9,color:"#94a3b8",marginLeft:2}}>{isOpen?"▲":"▼"}</span>
+                </div>
+              </div>
+              {isOpen&&(
+                <div style={{background:"#f8fafc",padding:"6px 8px",display:"flex",flexDirection:"column",gap:6}}>
+                  {units.map(u=>{
+                    const groups=av[u.key];
+                    const levels=lvOrder.filter(lv=>groups[lv]);
+                    return(
+                      <div key={u.key}>
+                        <div style={{fontSize:9,fontWeight:700,color:"#fff",background:u.hdr,
+                          borderRadius:3,padding:"1px 6px",marginBottom:3,display:"inline-block",
+                          letterSpacing:"0.05em"}}>
+                          {u.label}
+                        </div>
+                        {levels.length===0
+                          ?<div style={{fontSize:9,color:"#94a3b8",paddingLeft:4}}>No residents</div>
+                          :<div style={{display:"flex",flexDirection:"column",gap:2}}>
+                            {levels.map(lv=>{
+                              const g=groups[lv];
+                              const {sc,sb,tip}=chip(g.avail,g.total,g.postCall,g.vacation);
+                              return(
+                                <div key={lv} title={tip} style={{
+                                  display:"flex",alignItems:"center",gap:4,
+                                  background:sb,borderRadius:3,padding:"2px 6px",
+                                  border:`1px solid ${sc}33`,cursor:"default"
+                                }}>
+                                  <span style={{width:5,height:5,borderRadius:"50%",
+                                    background:lvColors[lv].dot,flexShrink:0,display:"inline-block"}}/>
+                                  <span style={{fontWeight:700,color:sc,minWidth:20,fontSize:9.5}}>{lv}</span>
+                                  <span style={{color:sc,fontWeight:600,fontSize:9.5}}>{g.avail}/{g.total}</span>
+                                  {(g.postCall.length>0||g.vacation.length>0)&&(
+                                    <span style={{fontSize:8,color:"#94a3b8",marginLeft:"auto"}}>
+                                      {g.postCall.length>0&&`${g.postCall.length}📵`}
+                                      {g.vacation.length>0&&` ${g.vacation.length}🏖`}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        }
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Mobile Day Card ───────────────────────────────────────────────────────────
+function MobileDayCard({row, selected, addTarget, setAddTarget, setAddSearch,
+  handleCellClick, handleBadgeClick, getBadgeStyle}){
+  const isWE=row.type==="WE";
+  const isMoveTarget=s=>selected&&!(selected.fromDate===row.date&&selected.fromSlot===s);
+  return(
+    <div style={{background:isWE?"#f0f9ff":"#fff",borderRadius:10,marginBottom:8,
+      overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,0.08)",
+      border:`1px solid ${isWE?"#bae6fd":"#e2e8f0"}`}}>
+      <div style={{background:isWE?"#0369a1":"#1e293b",color:"#fff",
+        padding:"8px 12px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontWeight:800,fontSize:14}}>{row.day}</span>
+          <span style={{fontSize:12,opacity:0.9}}>{row.date}</span>
+          {isWE&&<span style={{fontSize:10,background:"rgba(255,255,255,0.25)",borderRadius:3,padding:"1px 5px",fontWeight:600}}>WE</span>}
+        </div>
+        <div style={{textAlign:"right",fontSize:11,opacity:0.75}}>
+          <div>{row.greg}</div>
+          <div style={{fontSize:10}}>{row.hijri}</div>
+        </div>
+      </div>
+      {slots.map(s=>{
+        const isPickerOpen=addTarget?.date===row.date&&addTarget?.slot===s;
+        const isTarget=isMoveTarget(s);
+        return(
+          <div key={s} onClick={e=>{e.stopPropagation();handleCellClick(row.date,s);}}
+            style={{padding:"8px 12px",borderBottom:"1px solid #f1f5f9",position:"relative",
+              background:isTarget?(isWE?"#ecfdf5":"#f0fdf4"):isWE?"#f0f9ff":"#fff",
+              outline:isTarget?"2px dashed #22c55e":"none",outlineOffset:-2,
+              cursor:selected?"pointer":"default",transition:"background 0.1s"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+              <span style={{fontSize:10,fontWeight:800,color:slotHdrBg[s],letterSpacing:"0.05em",textTransform:"uppercase"}}>{slotLabel[s]}</span>
+              <button onClick={e=>{e.stopPropagation();setAddTarget(isPickerOpen?null:{date:row.date,slot:s});setAddSearch("");}}
+                style={{fontSize:13,fontWeight:700,padding:"3px 12px",borderRadius:4,
+                  border:`1px solid ${isPickerOpen?"#1e3a5f":"#94a3b8"}`,
+                  background:isPickerOpen?"#1e3a5f":"#f1f5f9",
+                  color:isPickerOpen?"#fff":"#475569",cursor:"pointer",minHeight:30}}>
+                +
+              </button>
+            </div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+              {row[s].length===0
+                ?<span style={{color:"#d1d5db",fontSize:12}}>—</span>
+                :row[s].map(name=>(
+                  <span key={name} onClick={e=>handleBadgeClick(e,name,row.date,s)}
+                    style={{...getBadgeStyle(name,row.date,s),fontSize:12,padding:"4px 8px",
+                      minHeight:30,display:"inline-flex",alignItems:"center"}}>
+                    {name}
+                    {levelMap[name]&&<span style={{fontSize:9,opacity:0.65,fontWeight:500,marginLeft:2}}>·{levelMap[name]}</span>}
+                  </span>
+                ))
+              }
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Production flag — true when served from Netlify (not localhost) ───────────
+const isProduction = !['localhost','127.0.0.1'].includes(location.hostname);
+
+// ── App ───────────────────────────────────────────────────────────────────────
+function App(){
+  const[sched,setSched]     =useState(()=>{
+    function migrate(s){
+      // Replace removed residents with their successors
+      const sub={"Maab":"H.Albaiek"};
+      return s.map(row=>({...row,
+        SO:row.SO.map(n=>sub[n]||n), NICU:row.NICU.map(n=>sub[n]||n),
+        PICU:row.PICU.map(n=>sub[n]||n), PMW:row.PMW.map(n=>sub[n]||n),
+        DC_NICU:row.DC_NICU||[], DC_PMW:row.DC_PMW||[],
+      }));
+    }
+    try{
+      const hash=location.hash.slice(1);
+      if(hash){const s=JSON.parse(decodeURIComponent(escape(atob(hash))));history.replaceState(null,"",location.pathname);return migrate(s);}
+    }catch{}
+    try{const s=localStorage.getItem('block11_sched');return s?migrate(JSON.parse(s)):deepClone(initialSchedule);}catch{return deepClone(initialSchedule);}
+  });
+  const[history,setHistory] =useState([]);
+  const[selected,setSelected]=useState(null);
+  const[spotlight,setSpotlight]=useState(null); // name of resident whose panel is open
+  const[colorMode,setColor] =useState("rotation");
+  const[activeFilter,setFilter]=useState(null); // null = show all
+  const[warnings,setWarnings]=useState([]);
+  const[moveLog,setMoveLog] =useState([]);
+  const[exporting,setExporting]=useState(false);
+  const[exportErr,setExportErr]=useState("");
+  const[page,setPage]       =useState("schedule"); // "schedule" | "residents"
+  const[saveMsg,setSaveMsg] =useState("");
+  const[addTarget,setAddTarget]=useState(null); // {date,slot} for the resident-picker dropdown
+  const[addSearch,setAddSearch]=useState("");
+
+  // ── Is a resident highlighted by the active filter or spotlight? ──
+  const isHighlighted = name => {
+    if(spotlight && name!==spotlight) return false;
+    return !activeFilter || filterGroups[activeFilter]?.has(name);
+  };
+
+  // ── Badge style ──
+  const getBadgeStyle=(name,date,slot)=>{
+    const isSel = selected?.name===name&&selected?.fromDate===date&&selected?.fromSlot===slot;
+    const highlighted = isHighlighted(name);
+    const rot = rotationMap[name]||"";
+    let bg,bd,tx;
+    if(isSel){
+      bg="#fef08a"; bd="#ca8a04"; tx="#713f12";
+    } else if(!highlighted){
+      bg="#f1f5f9"; bd="#e2e8f0"; tx="#cbd5e1"; // faded
+    } else if(colorMode==="rotation"){
+      const c=rotColors[rot]||{bg:"#f1f5f9",bd:"#94a3b8",tx:"#334155"};
+      bg=c.bg; bd=c.bd; tx=c.tx;
+    } else {
+      bg="#f1f5f9"; bd="#94a3b8"; tx="#334155";
+    }
+    return{
+      display:"inline-flex",alignItems:"center",gap:2,
+      background:bg,border:`1.5px solid ${bd}`,color:tx,
+      borderRadius:4,padding:"2px 6px",fontSize:10.5,fontWeight:600,
+      whiteSpace:"nowrap",margin:"1px 1px 2px",
+      cursor:"pointer",userSelect:"none",
+      opacity:highlighted||isSel?1:0.7,
+      boxShadow:isSel?"0 0 0 3px rgba(202,138,4,0.3)":highlighted&&activeFilter?"0 0 0 2px "+filterColors[activeFilter]?.active+"55":"none",
+      transform:isSel?"scale(1.05)":"scale(1)",
+      transition:"all 0.13s",
+    };
+  };
+
+  const getCellStyle=(isWE,date,slot)=>({
+    padding:"5px 6px",verticalAlign:"top",minWidth:115,
+    borderRight:"1px solid #d1d5db",
+    // stronger bottom border = clear day separator
+    borderBottom:"2px solid #94a3b8",
+    background:selected&&!(selected.fromDate===date&&selected.fromSlot===slot)
+      ?(isWE?"#ecfdf5":"#f0fdf4")
+      :isWE?"#f0f9ff":"#fff",
+    outline:selected&&!(selected.fromDate===date&&selected.fromSlot===slot)
+      ?"2px dashed #22c55e":"none",
+    outlineOffset:-2,
+    cursor:selected?"pointer":"default",
+    transition:"background 0.1s",
+  });
+
+  const handleBadgeClick=(e,name,date,slot)=>{
+    e.stopPropagation();
+    setSpotlight(name); // always open/refresh the panel for this resident
+    if(selected?.name===name&&selected?.fromDate===date&&selected?.fromSlot===slot){setSelected(null);}
+    else{setSelected({name,fromDate:date,fromSlot:slot});setWarnings([]);}
+  };
+
+  const handleCellClick=(toDate,toSlot)=>{
+    if(isProduction||!selected)return;
+    const{name,fromDate,fromSlot}=selected;
+    if(fromDate===toDate&&fromSlot===toSlot){setSelected(null);return;}
+    setHistory(h=>[...h.slice(-29),deepClone(sched)]);
+    const next=deepClone(sched);
+    const fromRow=next.find(r=>r.date===fromDate);
+    const toRow=next.find(r=>r.date===toDate);
+    fromRow[fromSlot]=fromRow[fromSlot].filter(n=>n!==name);
+    if(!toRow[toSlot].includes(name))toRow[toSlot]=[...toRow[toSlot],name];
+    const warns=checkWarnings(next,name,toDate,toSlot);
+    setSched(next);setSelected(null);setWarnings(warns);
+    const slbl=s=>slotLabel[s]||dcSlotLabel[s]||s;
+    setMoveLog(log=>[{text:`${name}: ${fromDate} ${slbl(fromSlot)} → ${toDate} ${slbl(toSlot)}`,hasWarn:warns.length>0,time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})},...log.slice(0,9)]);
+  };
+
+  const handleDelete=(name,fromDate,fromSlot)=>{
+    setHistory(h=>[...h.slice(-29),deepClone(sched)]);
+    const next=deepClone(sched);
+    next.find(r=>r.date===fromDate)[fromSlot]=next.find(r=>r.date===fromDate)[fromSlot].filter(n=>n!==name);
+    setSched(next);setSelected(null);setWarnings([]);
+    const slbl2=s=>slotLabel[s]||dcSlotLabel[s]||s;
+    setMoveLog(log=>[{text:`${name}: removed from ${fromDate} ${slbl2(fromSlot)}`,hasWarn:false,time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})},...log.slice(0,9)]);
+  };
+  const handleBatchAddDC=(entries,resName)=>{
+    setHistory(h=>[...h.slice(-29),deepClone(sched)]);
+    const next=deepClone(sched);
+    entries.forEach(({date,slot})=>{
+      const row=next.find(r=>r.date===date);
+      if(row&&!(row[slot]||[]).includes(resName))row[slot]=[...(row[slot]||[]),resName];
+    });
+    setSched(next);
+    setMoveLog(log=>[{text:`${resName}: added ${entries.length} day call(s)`,hasWarn:false,time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})},...log.slice(0,9)]);
+  };
+  const recommendDayCalls=()=>{
+    const next=deepClone(sched);
+    // Residents excluded from DC_PMW: R4, EXT, NICU team, PICU team
+    const dcPmwExcluded=new Set([...nicuUnit,...picuUnit]);
+    const dcPmwSeniors=Object.keys(levelMap).filter(n=>(levelMap[n]==="R3"||levelMap[n]==="R2")&&!dcPmwExcluded.has(n));
+    const dcPmwJuniors=Object.keys(levelMap).filter(n=>levelMap[n]==="R1"&&!dcPmwExcluded.has(n));
+    // DC_NICU: NICU team R1+R2 only
+    const dcNicuElig=Object.keys(levelMap).filter(n=>nicuUnit.has(n)&&(levelMap[n]==="R1"||levelMap[n]==="R2"));
+
+    // Count current DC assignments for balancing
+    const pmwCnt={},nicuCnt={};
+    [...dcPmwSeniors,...dcPmwJuniors].forEach(n=>pmwCnt[n]=0);
+    dcNicuElig.forEach(n=>nicuCnt[n]=0);
+    next.forEach(r=>{
+      (r.DC_PMW||[]).forEach(n=>{if(pmwCnt[n]!==undefined)pmwCnt[n]++;});
+      (r.DC_NICU||[]).forEach(n=>{if(nicuCnt[n]!==undefined)nicuCnt[n]++;});
+    });
+
+    const isPostCall=(name,idx)=>{
+      if(idx<=0)return false;
+      const prev=next[idx-1];
+      return[...prev.SO,...prev.NICU,...prev.PICU,...prev.PMW].includes(name);
+    };
+    const isVacation=(name,date)=>(vacationWeeks[name]||[]).includes(getWeek(date));
+
+    let changed=0;
+    next.forEach((row,idx)=>{
+      if(row.type!=="WE")return;
+      const existing=row.DC_PMW||[];
+      const hasSenior=existing.some(n=>dcPmwSeniors.includes(n));
+      const hasJunior=existing.some(n=>dcPmwJuniors.includes(n));
+
+      if(!hasSenior){
+        const c=dcPmwSeniors.filter(n=>!existing.includes(n)&&!isPostCall(n,idx)&&!isVacation(n,row.date)&&!(unwantedDays[n]||[]).includes(row.date))
+          .sort((a,b)=>pmwCnt[a]-pmwCnt[b]);
+        if(c.length){row.DC_PMW=[...existing,c[0]];pmwCnt[c[0]]++;changed++;}
+      }
+      if(!hasJunior){
+        const ex2=row.DC_PMW||[];
+        const c=dcPmwJuniors.filter(n=>!ex2.includes(n)&&!isPostCall(n,idx)&&!isVacation(n,row.date)&&!(unwantedDays[n]||[]).includes(row.date))
+          .sort((a,b)=>pmwCnt[a]-pmwCnt[b]);
+        if(c.length){row.DC_PMW=[...ex2,c[0]];pmwCnt[c[0]]++;changed++;}
+      }
+    });
+
+    // DC_NICU: Thu only, 1 NICU R1/R2
+    next.forEach((row,idx)=>{
+      if(row.day!=="Thu")return;
+      if((row.DC_NICU||[]).length>0)return;
+      const c=dcNicuElig.filter(n=>!isPostCall(n,idx)&&!isVacation(n,row.date)&&!(unwantedDays[n]||[]).includes(row.date))
+        .sort((a,b)=>nicuCnt[a]-nicuCnt[b]);
+      if(c.length){row.DC_NICU=[c[0]];nicuCnt[c[0]]++;changed++;}
+    });
+
+    if(changed>0){
+      setHistory(h=>[...h.slice(-29),deepClone(sched)]);
+      setSched(next);
+      setMoveLog(log=>[{text:`Recommended ${changed} day call slot(s)`,hasWarn:false,time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})},...log.slice(0,9)]);
+    }
+  };
+
+  const handleAddToSlot=(name,date,slot)=>{
+    setHistory(h=>[...h.slice(-29),deepClone(sched)]);
+    const next=deepClone(sched);
+    const row=next.find(r=>r.date===date);
+    if(!row[slot].includes(name))row[slot]=[...row[slot],name];
+    const warns=checkWarnings(next,name,date,slot);
+    setSched(next);setWarnings(warns);setAddTarget(null);setAddSearch("");
+    setMoveLog(log=>[{text:`${name}: added to ${date} ${slotLabel[slot]}`,hasWarn:warns.length>0,time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})},...log.slice(0,9)]);
+  };
+  const undo=()=>{if(!history.length)return;setSched(history[history.length-1]);setHistory(h=>h.slice(0,-1));setWarnings([]);setSelected(null);};
+  const reset=()=>{if(!window.confirm("Reset the entire schedule to the original template? This cannot be undone."))return;setSched(deepClone(initialSchedule));setHistory([]);setWarnings([]);setSelected(null);setMoveLog([]);};
+  const handleExport=async()=>{setExporting(true);setExportErr("");try{await exportDocx(sched);}catch(err){console.error(err);setExportErr(err.message||"Export failed.");}finally{setExporting(false);}};
+  useEffect(()=>{try{localStorage.setItem('block11_sched',JSON.stringify(sched));}catch{}}, [sched]);
+  const handleSave=()=>{try{localStorage.setItem('block11_sched',JSON.stringify(sched));}catch{}setSaveMsg("Saved ✓");setTimeout(()=>setSaveMsg(""),2500);};
+  const[publishMsg,setPublishMsg]=useState("");
+  const handlePublish=async()=>{
+    try{
+      setPublishMsg("Publishing…");
+      const resp=await fetch((location.pathname||'/')+'?v='+Date.now(),{cache:'no-store'});
+      const html=await resp.text();
+      const lines=sched.map(row=>{
+        const so=JSON.stringify(row.SO),nicu=JSON.stringify(row.NICU),picu=JSON.stringify(row.PICU),pmw=JSON.stringify(row.PMW);
+        const dcn=JSON.stringify(row.DC_NICU||[]),dcp=JSON.stringify(row.DC_PMW||[]);
+        return `  { date:"${row.date}", greg:"${row.greg}", hijri:"${row.hijri}", day:"${row.day}", type:"${row.type}", SO:${so}, NICU:${nicu}, PICU:${picu}, PMW:${pmw}, DC_NICU:${dcn}, DC_PMW:${dcp} }`;
+      });
+      const newBlock='const initialSchedule = [\n'+lines.join(',\n')+'\n];';
+      const updated=html.replace(/const initialSchedule = \[[\s\S]*?\];/,newBlock);
+      const result=await fetch('/publish',{method:'POST',headers:{'Content-Type':'text/html'},body:updated});
+      if(result.ok){setPublishMsg("Published! ✓");}else{setPublishMsg("Server error — is server.py running?");}
+      setTimeout(()=>setPublishMsg(""),5000);
+    }catch(e){setPublishMsg("Failed — start server.py first");setTimeout(()=>setPublishMsg(""),5000);}
+  };
+  const[shareMsg,setShareMsg]=useState("");
+  const[isMobile,setIsMobile]=useState(()=>window.innerWidth<768);
+  const[mobilePanelOpen,setMobilePanelOpen]=useState(null); // "tracker"|"availability"|"history"|null
+  useEffect(()=>{
+    const fn=()=>setIsMobile(window.innerWidth<768);
+    window.addEventListener('resize',fn);
+    return()=>window.removeEventListener('resize',fn);
+  },[]);
+  const handleCopyLink=()=>{
+    try{
+      const encoded=btoa(unescape(encodeURIComponent(JSON.stringify(sched))));
+      const url=location.origin+location.pathname+"#"+encoded;
+      navigator.clipboard.writeText(url).then(()=>{setShareMsg("Link copied!");setTimeout(()=>setShareMsg(""),3000);});
+    }catch(e){setShareMsg("Copy failed");setTimeout(()=>setShareMsg(""),3000);}
+  };
+
+  const weeks=[
+    {label:"W1",dates:"Jul 5–11",rows:sched.slice(0,7)},
+    {label:"W2",dates:"Jul 12–18",rows:sched.slice(7,14)},
+    {label:"W3",dates:"Jul 19–25",rows:sched.slice(14,21)},
+    {label:"W4",dates:"Jul 26–Aug 1",rows:sched.slice(21,28)},
+  ];
+
+  return(
+    <div onClick={()=>{if(selected)setSelected(null);if(addTarget)setAddTarget(null);}}
+      style={{fontFamily:"'Inter',system-ui,sans-serif",background:"#f8fafc",minHeight:"100vh",padding:12}}>
+
+      {/* ── Header ── */}
+      <div onClick={e=>e.stopPropagation()}
+        style={{background:"#fff",borderRadius:8,padding:"10px 14px",marginBottom:8,
+          boxShadow:"0 1px 4px rgba(0,0,0,0.08)",border:"1px solid #e2e8f0"}}>
+
+        {/* ── Page tabs ── */}
+        <div style={{display:"flex",gap:0,marginBottom:10,borderBottom:"2px solid #e2e8f0"}}>
+          {[["schedule","📅 Schedule"],["residents","👤 Residents"],["rota","📋 Master Rota"]].map(([p,label])=>(
+            <button key={p} onClick={()=>setPage(p)} style={{
+              padding:"6px 18px",fontSize:12,fontWeight:700,cursor:"pointer",border:"none",
+              background:"none",borderBottom:`3px solid ${page===p?"#1e3a5f":"transparent"}`,
+              color:page===p?"#1e3a5f":"#64748b",marginBottom:-2,transition:"all 0.15s",
+            }}>{label}</button>
+          ))}
+        </div>
+
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:8}}>
+          <div>
+            <div style={{fontSize:15,fontWeight:800,color:"#1e3a5f"}}>QHN — Duty Rota Block #11</div>
+            <div style={{fontSize:11,color:"#475569",marginTop:1}}>05/07/2026 – 01/08/2026 · 20 Muharram – 17 Safar 1448</div>
+            <div style={{fontSize:11,color:"#64748b"}}>Acting Chief Resident: <strong>Hassan AlSaif</strong></div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:5,alignItems:"flex-end"}}>
+            <div style={{display:"flex",gap:4,flexWrap:"wrap",justifyContent:"flex-end"}}>
+              <span style={{fontSize:10,color:"#64748b",fontWeight:700,alignSelf:"center"}}>COLOR</span>
+              {["rotation","none"].map(m=>(
+                <button key={m} onClick={()=>setColor(m)} style={{padding:"2px 8px",borderRadius:4,fontSize:11,fontWeight:600,cursor:"pointer",background:colorMode===m?"#1e293b":"#fff",color:colorMode===m?"#fff":"#475569",border:`1px solid ${colorMode===m?"#1e293b":"#cbd5e1"}`}}>{m==="rotation"?"By Rotation":"None"}</button>
+              ))}
+            </div>
+            <div style={{display:"flex",gap:4,flexWrap:"wrap",justifyContent:"flex-end"}}>
+              {!isProduction&&<button onClick={undo} disabled={!history.length} style={{padding:"2px 9px",borderRadius:4,fontSize:11,fontWeight:600,cursor:history.length?"pointer":"default",background:history.length?"#fffbeb":"#f9fafb",color:history.length?"#92400e":"#9ca3af",border:`1px solid ${history.length?"#fcd34d":"#e5e7eb"}`}}>↩ Undo{history.length?` (${history.length})`:""}</button>}
+              {!isProduction&&<button onClick={reset} style={{padding:"2px 9px",borderRadius:4,fontSize:11,fontWeight:600,cursor:"pointer",background:"#fef2f2",color:"#991b1b",border:"1px solid #fca5a5"}}>↺ Reset</button>}
+              {!isProduction&&<button onClick={handleSave} style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:saveMsg?"#166534":"#065f46",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4,transition:"background 0.3s"}}><span>💾</span>{saveMsg||"Save"}</button>}
+              {!isProduction&&<button onClick={handleCopyLink} style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:shareMsg?"#1d4ed8":"#3b82f6",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4,transition:"background 0.3s"}}><span>🔗</span>{shareMsg||"Share Link"}</button>}
+              {!isProduction&&<button onClick={handlePublish} title="Bake schedule into deploy/index.html and git push to Netlify" style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:publishMsg==="Published! ✓"?"#166534":publishMsg?"#7c3aed":"#6d28d9",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4,transition:"background 0.3s"}}><span>📦</span>{publishMsg||"Publish"}</button>}
+              {!isProduction&&<button onClick={recommendDayCalls} title="Auto-fill empty day call slots" style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"#b45309",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4}}><span>✦</span> Recommend Day Calls</button>}
+              <button onClick={handleExport} disabled={exporting} style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:exporting?"default":"pointer",background:exporting?"#94a3b8":"#1e3a5f",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4}}>
+                {exporting?<><span>⏳</span> Generating…</>:<><span>📄</span> Export DOCX</>}
+              </button>
+            </div>
+            {exportErr&&<div style={{fontSize:10,color:"#dc2626"}}>{exportErr}</div>}
+          </div>
+        </div>
+
+        {/* ── FILTER ROW (schedule page only) ── */}
+        {page==="schedule"&&(
+        <div style={{marginTop:10,paddingTop:8,borderTop:"1px solid #f1f5f9"}}>
+          <div style={{fontSize:10,fontWeight:700,color:"#64748b",letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:5}}>
+            Highlight Filter — click to isolate a group, click again to clear
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+            {Object.entries(filterGroups).map(([label,members])=>{
+              const isActive=activeFilter===label;const fc=filterColors[label];
+              return(
+                <button key={label} onClick={()=>setFilter(isActive?null:label)} style={{padding:"4px 12px",borderRadius:20,fontSize:11.5,fontWeight:700,cursor:"pointer",background:isActive?fc.active:fc.light,color:isActive?"#fff":fc.text,border:`1.5px solid ${isActive?fc.active:fc.active+"55"}`,boxShadow:isActive?`0 0 0 3px ${fc.active}33`:"none",transition:"all 0.15s",display:"flex",alignItems:"center",gap:5}}>
+                  {isActive&&<span style={{fontSize:10}}>✓</span>}{label}<span style={{fontSize:10,opacity:0.7,fontWeight:500}}>({members.size})</span>
+                </button>
+              );
+            })}
+            {activeFilter&&<button onClick={()=>setFilter(null)} style={{padding:"4px 10px",borderRadius:20,fontSize:11,fontWeight:600,cursor:"pointer",background:"#f1f5f9",color:"#64748b",border:"1px solid #cbd5e1"}}>✕ Clear filter</button>}
+          </div>
+          {activeFilter&&(
+            <div style={{marginTop:5,fontSize:11,color:filterColors[activeFilter].text,background:filterColors[activeFilter].light,padding:"3px 10px",borderRadius:4,display:"inline-block"}}>
+              Showing <strong>{activeFilter}</strong>: {[...filterGroups[activeFilter]].join(", ")}
+            </div>
+          )}
+        </div>
+        )}
+
+        {/* Instruction */}
+        <div style={{marginTop:6,padding:"5px 10px",background:"#f0f9ff",borderRadius:5,fontSize:11,color:"#0369a1",border:"1px solid #bae6fd"}}>
+          {page==="residents"
+            ?"👤 Individual resident schedules — vacation, unwanted days, constraints, and call details with gap analysis."
+            :spotlight
+              ?selected
+                ?<span>✦ <strong>{selected.name}</strong> selected from <em>{selected.fromDate} {slotLabel[selected.fromSlot]}</em> — click any cell to move, or pick a different call in the side panel.</span>
+                :<span>👁 Viewing <strong>{spotlight}</strong>'s schedule — click a row in the panel to select a call for moving.</span>
+              :"✦ Click a badge to open its schedule panel · Click a cell to move · Use filters to highlight teams · 📄 Export saves current state"}
+        </div>
+
+        {/* Rotation legend (schedule page, no filter) */}
+        {page==="schedule"&&colorMode==="rotation"&&!activeFilter&&(
+          <div style={{display:"flex",flexWrap:"wrap",gap:3,marginTop:6,paddingTop:5,borderTop:"1px solid #f1f5f9"}}>
+            {Object.entries(rotColors).map(([r,c])=>(
+              <span key={r} style={{background:c.bg,border:`1px solid ${c.bd}`,color:c.tx,borderRadius:3,padding:"1px 6px",fontSize:9.5,fontWeight:600}}>{r}</span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Warnings (schedule page only) ── */}
+      {page==="schedule"&&warnings.length>0&&(
+        <div onClick={e=>e.stopPropagation()} style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:8,padding:"10px 14px",marginBottom:8}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+            <span style={{fontSize:12,fontWeight:700,color:"#92400e"}}>⚠️ {warnings.length} constraint warning{warnings.length>1?"s":""} detected</span>
+            <button onClick={()=>setWarnings([])} style={{background:"none",border:"none",cursor:"pointer",fontSize:16,color:"#92400e"}}>×</button>
+          </div>
+          {warnings.map((w,i)=>(
+            <div key={i} style={{fontSize:11.5,color:"#78350f",marginBottom:3,paddingLeft:6,borderLeft:"3px solid #fbbf24"}}>{w}</div>
+          ))}
+        </div>
+      )}
+
+      {/* ── PAGE 2: Residents ── */}
+      {page==="residents"&&(
+        <div onClick={e=>e.stopPropagation()}>
+          <ResidentsPage sched={sched}/>
+        </div>
+      )}
+
+      {/* ── PAGE 3: Master Rota ── */}
+      {page==="rota"&&(
+        <div onClick={e=>e.stopPropagation()}>
+          <MasterRotaPage sched={sched}/>
+        </div>
+      )}
+
+      {/* ── PAGE 1: Schedule table + log ── */}
+      {page==="schedule"&&(isMobile?(
+
+        /* ══ MOBILE LAYOUT ══ */
+        <div style={{paddingBottom:70}}>
+          {sched.map((row)=>(
+            <MobileDayCard key={row.date} row={row}
+              selected={selected} addTarget={addTarget}
+              setAddTarget={setAddTarget} setAddSearch={setAddSearch}
+              handleCellClick={handleCellClick}
+              handleBadgeClick={handleBadgeClick}
+              getBadgeStyle={getBadgeStyle}/>
+          ))}
+
+          {/* Mobile add-resident bottom sheet */}
+          {addTarget&&(
+            <div onClick={()=>{setAddTarget(null);setAddSearch("");}}
+              style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:199}}>
+              <div onClick={e=>e.stopPropagation()}
+                style={{position:"fixed",bottom:60,left:0,right:0,zIndex:200,
+                  background:"#fff",borderRadius:"16px 16px 0 0",
+                  boxShadow:"0 -4px 24px rgba(0,0,0,0.2)",maxHeight:"65vh",
+                  display:"flex",flexDirection:"column"}}>
+                <div style={{padding:"14px 16px 10px",borderBottom:"1px solid #e2e8f0",
+                  display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+                  <span style={{fontWeight:700,fontSize:15}}>Add to {slotLabel[addTarget.slot]} — {addTarget.date}</span>
+                  <button onClick={()=>{setAddTarget(null);setAddSearch("");}}
+                    style={{background:"none",border:"none",fontSize:24,cursor:"pointer",color:"#94a3b8",lineHeight:1}}>×</button>
+                </div>
+                <input autoFocus placeholder="Search resident…" value={addSearch}
+                  onChange={e=>setAddSearch(e.target.value)} onClick={e=>e.stopPropagation()}
+                  style={{padding:"12px 16px",fontSize:15,border:"none",borderBottom:"1px solid #e2e8f0",outline:"none",flexShrink:0}}/>
+                <div style={{overflowY:"auto",flex:1,paddingBottom:12}}>
+                  {(()=>{
+                    const lvOrder=["R4","R3","R2","R1","EXT"];
+                    const row=sched.find(r=>r.date===addTarget.date);
+                    const allNames=row?lvOrder.flatMap(lv=>Object.keys(levelMap).filter(n=>levelMap[n]===lv&&!row[addTarget.slot].includes(n))):[];
+                    const filt=addSearch?allNames.filter(n=>n.toLowerCase().includes(addSearch.toLowerCase())):allNames;
+                    if(filt.length===0)return <div style={{padding:"20px 16px",color:"#94a3b8",fontSize:14}}>No match</div>;
+                    return lvOrder.map(lv=>{
+                      const lvN=filt.filter(n=>levelMap[n]===lv);
+                      if(!lvN.length)return null;
+                      return(
+                        <div key={lv}>
+                          <div style={{padding:"6px 16px",fontSize:11,fontWeight:700,color:"#94a3b8",
+                            background:"#f8fafc",textTransform:"uppercase",letterSpacing:"0.06em"}}>{lv}</div>
+                          {lvN.map(name=>(
+                            <div key={name} onClick={()=>handleAddToSlot(name,addTarget.date,addTarget.slot)}
+                              style={{padding:"12px 16px",fontSize:14,fontWeight:500,color:"#1e293b",
+                                borderBottom:"1px solid #f8fafc",display:"flex",
+                                justifyContent:"space-between",alignItems:"center",minHeight:48,cursor:"pointer"}}
+                              onTouchStart={e=>e.currentTarget.style.background="#f0f9ff"}
+                              onTouchEnd={e=>e.currentTarget.style.background="transparent"}>
+                              <span>{name}</span>
+                              <span style={{fontSize:11,color:"#94a3b8"}}>{rotationMap[name]||""}</span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ResidentPanel full-screen overlay */}
+          {spotlight&&(
+            <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:300}}
+              onClick={()=>{setSpotlight(null);setSelected(null);}}>
+              <div onClick={e=>e.stopPropagation()}
+                style={{position:"fixed",top:0,left:0,bottom:0,width:"min(92vw,400px)",
+                  background:"#fff",boxShadow:"4px 0 24px rgba(0,0,0,0.2)",overflowY:"auto"}}>
+                <ResidentPanel name={spotlight} sched={sched} selected={selected}
+                  setSelected={isProduction?()=>{}:sel=>{setSelected(sel);setWarnings([]);}}
+                  onClose={()=>{setSpotlight(null);setSelected(null);}}
+                  onDelete={isProduction?null:(fromDate,fromSlot)=>handleDelete(spotlight,fromDate,fromSlot)}
+                  onAddDC={isProduction?null:(entries)=>handleBatchAddDC(entries,spotlight)}/>
+              </div>
+            </div>
+          )}
+
+          {/* Tracker slide-in overlay */}
+          {mobilePanelOpen==="tracker"&&(
+            <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:300}}
+              onClick={()=>setMobilePanelOpen(null)}>
+              <div onClick={e=>e.stopPropagation()}
+                style={{position:"fixed",top:0,right:0,bottom:60,width:"min(88vw,340px)",
+                  background:"#fff",boxShadow:"-4px 0 24px rgba(0,0,0,0.2)",
+                  overflowY:"auto",display:"flex",flexDirection:"column"}}>
+                <div style={{background:"#1e293b",color:"#fff",padding:"14px 16px",
+                  display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+                  <span style={{fontWeight:700,fontSize:15}}>Residents</span>
+                  <button onClick={()=>setMobilePanelOpen(null)} style={{background:"none",border:"none",color:"#94a3b8",fontSize:24,cursor:"pointer",lineHeight:1}}>×</button>
+                </div>
+                <div style={{flex:1,overflowY:"auto"}}>
+                  <ResidentTracker sched={sched} spotlight={spotlight}
+                    setSpotlight={name=>{setSpotlight(name);setMobilePanelOpen(null);}}
+                    setSelected={setSelected} setWarnings={setWarnings}/>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Availability slide-in overlay */}
+          {mobilePanelOpen==="availability"&&(
+            <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:300}}
+              onClick={()=>setMobilePanelOpen(null)}>
+              <div onClick={e=>e.stopPropagation()}
+                style={{position:"fixed",top:0,right:0,bottom:60,width:"min(88vw,360px)",
+                  background:"#fff",boxShadow:"-4px 0 24px rgba(0,0,0,0.2)",
+                  overflowY:"auto",display:"flex",flexDirection:"column"}}>
+                <div style={{background:"#1e293b",color:"#fff",padding:"14px 16px",
+                  display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+                  <span style={{fontWeight:700,fontSize:15}}>Availability</span>
+                  <button onClick={()=>setMobilePanelOpen(null)} style={{background:"none",border:"none",color:"#94a3b8",fontSize:24,cursor:"pointer",lineHeight:1}}>×</button>
+                </div>
+                <div style={{flex:1,overflowY:"auto"}}>
+                  <AvailabilityPanel sched={sched}/>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* History bottom-sheet overlay */}
+          {mobilePanelOpen==="history"&&moveLog.length>0&&(
+            <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:300}}
+              onClick={()=>setMobilePanelOpen(null)}>
+              <div onClick={e=>e.stopPropagation()}
+                style={{position:"fixed",bottom:60,left:0,right:0,background:"#fff",
+                  borderRadius:"16px 16px 0 0",maxHeight:"60vh",
+                  boxShadow:"0 -4px 24px rgba(0,0,0,0.2)",display:"flex",flexDirection:"column"}}>
+                <div style={{background:"#1e293b",color:"#94a3b8",padding:"12px 16px",
+                  borderRadius:"16px 16px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+                  <span style={{fontWeight:700,fontSize:13,textTransform:"uppercase",letterSpacing:"0.06em"}}>Move History</span>
+                  <button onClick={()=>setMobilePanelOpen(null)} style={{background:"none",border:"none",color:"#94a3b8",fontSize:24,cursor:"pointer",lineHeight:1}}>×</button>
+                </div>
+                <div style={{overflowY:"auto",flex:1}}>
+                  {moveLog.map((m,i)=>(
+                    <div key={i} style={{padding:"10px 16px",borderBottom:"1px solid #f1f5f9",background:i===0?"#fffbeb":"#fff"}}>
+                      <div style={{fontSize:12,fontWeight:600,color:"#1e293b"}}>
+                        {m.hasWarn&&<span style={{color:"#d97706",marginRight:3}}>⚠️</span>}{m.text}
+                      </div>
+                      <div style={{fontSize:11,color:"#9ca3af",marginTop:2}}>{m.time}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Fixed bottom nav bar */}
+          <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:150,
+            background:"#1e293b",display:"flex",borderTop:"2px solid #334155",height:60}}>
+            {[
+              ["tracker","👥","Residents"],
+              ["availability","📊","Availability"],
+              moveLog.length>0&&["history","📜","History"],
+            ].filter(Boolean).map(([key,icon,label])=>(
+              <button key={key} onClick={()=>setMobilePanelOpen(mobilePanelOpen===key?null:key)}
+                style={{flex:1,padding:"6px 4px",background:mobilePanelOpen===key?"#334155":"none",
+                  border:"none",color:mobilePanelOpen===key?"#e2e8f0":"#94a3b8",cursor:"pointer",
+                  fontSize:11,fontWeight:700,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                <span style={{fontSize:20}}>{icon}</span>
+                <span>{label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+      ):(
+        <React.Fragment>
+        <div style={{display:"flex",gap:8,alignItems:"flex-start"}}>
+
+        {/* ── Resident Tracker — always visible left sidebar ── */}
+        <ResidentTracker
+          sched={sched}
+          spotlight={spotlight}
+          setSpotlight={setSpotlight}
+          setSelected={setSelected}
+          setWarnings={setWarnings}
+        />
+
+        {/* Resident schedule panel — shown when a badge or tracker row is clicked */}
+        {spotlight&&(
+          <ResidentPanel
+            name={spotlight}
+            sched={sched}
+            selected={selected}
+            setSelected={sel=>{setSelected(sel);setWarnings([]);}}
+            onClose={()=>{setSpotlight(null);setSelected(null);}}
+            onDelete={(fromDate,fromSlot)=>handleDelete(spotlight,fromDate,fromSlot)}
+            onAddDC={(entries)=>handleBatchAddDC(entries,spotlight)}
+          />
+        )}
+
+        <div style={{flex:1,overflowX:"auto",borderRadius:8,boxShadow:"0 1px 4px rgba(0,0,0,0.1)",border:"1px solid #94a3b8"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:11.5}}>
+            <thead>
+              <tr>
+                <th style={{padding:"7px 8px",background:"#1e293b",color:"#fff",fontWeight:700,borderRight:"1px solid #334155",width:36,position:"sticky",left:0,zIndex:3}}>Day</th>
+                <th style={{padding:"7px 8px",background:"#1e293b",color:"#fff",fontWeight:700,borderRight:"1px solid #334155",width:48}}>Greg</th>
+                <th style={{padding:"7px 8px",background:"#1e293b",color:"#fff",fontWeight:700,borderRight:"1px solid #334155",width:58}}>Hijri</th>
+                {dcSlots.map(s=>(
+                  <th key={s} style={{padding:"7px 10px",background:dcSlotHdrBg[s],color:"#fff",fontWeight:700,borderRight:"1px solid rgba(255,255,255,0.3)",textAlign:"left",minWidth:100,opacity:0.9}}>
+                    <div style={{fontSize:8,fontWeight:600,letterSpacing:"0.06em",opacity:0.8,textTransform:"uppercase",marginBottom:1}}>Day Call 07:30–15:00</div>
+                    {dcSlotLabel[s]}
+                  </th>
+                ))}
+                {slots.map(s=>(
+                  <th key={s} style={{padding:"7px 10px",background:slotHdrBg[s],color:"#fff",fontWeight:700,borderRight:"1px solid rgba(255,255,255,0.15)",textAlign:"left",minWidth:120}}>
+                    <div style={{fontSize:8,fontWeight:600,letterSpacing:"0.06em",opacity:0.7,textTransform:"uppercase",marginBottom:1}}>Night Call 15:00–07:30</div>
+                    {slotLabel[s]}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {weeks.map(({label,dates,rows})=>(
+                <>
+                  <tr key={label}>
+                    <td colSpan={9} style={{background:"#334155",color:"#94a3b8",fontSize:9.5,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",padding:"4px 10px",borderBottom:"2px solid #94a3b8"}}>
+                      {label} · {dates}
+                    </td>
+                  </tr>
+                  {rows.map((row,ri)=>{
+                    const isWE=row.type==="WE";
+                    const isLastInWeek=ri===rows.length-1;
+                    const bb=isLastInWeek?"3px solid #64748b":"2px solid #94a3b8";
+                    return(
+                      <tr key={row.date} style={{borderBottom:bb}}>
+                          <td style={{padding:"5px 8px",fontWeight:700,fontSize:11,color:isWE?"#0369a1":"#1e293b",
+                            borderRight:"1px solid #d1d5db",borderBottom:bb,
+                            background:isWE?"#e0f2fe":"#f8fafc",position:"sticky",left:0,zIndex:1,whiteSpace:"nowrap"}}>
+                            {row.day}{isWE&&<div style={{fontSize:7.5,fontWeight:500,color:"#0284c7",lineHeight:1}}>WE</div>}
+                          </td>
+                          <td style={{padding:"5px 6px",textAlign:"center",fontWeight:600,fontSize:11,color:"#374151",
+                            background:isWE?"#f0f9ff":"#fff",borderRight:"1px solid #d1d5db",borderBottom:bb,
+                            whiteSpace:"nowrap"}}>{row.greg}</td>
+                          <td style={{padding:"5px 6px",textAlign:"center",fontSize:10.5,color:"#6b7280",
+                            background:isWE?"#f0f9ff":"#fff",borderRight:"1px solid #d1d5db",borderBottom:bb,
+                            fontFamily:"serif",whiteSpace:"nowrap"}}>{row.hijri}</td>
+                          {/* Day Call columns – Thu has both DC_PMW+DC_NICU; Fri/Sat have DC_PMW only */}
+                          {dcSlots.map(s=>{
+                              const isWknd=row.day==="Fri"||row.day==="Sat";
+                              if(s==="DC_NICU"&&isWknd) return(
+                                <td key={s} style={{background:"#e5e7eb",borderRight:"1px solid #94a3b8",borderBottom:bb,
+                                  verticalAlign:"middle",textAlign:"center",padding:"4px 6px",minWidth:80}}>
+                                  <span style={{fontSize:9,color:"#9ca3af",fontWeight:600,letterSpacing:"0.04em",textTransform:"uppercase"}}>No NICU</span>
+                                </td>
+                              );
+                              {/* normal day-call cell */}
+                              const isPickerOpen=addTarget?.date===row.date&&addTarget?.slot===s;
+                              const allDC=Object.keys(levelMap).filter(n=>!row[s].includes(n));
+                              const filteredDC=addSearch?allDC.filter(n=>n.toLowerCase().includes(addSearch.toLowerCase())):allDC;
+                              return(
+                                <td key={s} onClick={e=>{e.stopPropagation();handleCellClick(row.date,s);}}
+                                  style={{background:isPickerOpen?"#fff7ed":"#fffbeb",borderRight:"1px solid #d97706",borderBottom:bb,position:"relative",verticalAlign:"top",paddingBottom:18,padding:"6px 7px 18px",minWidth:100}}>
+                                  {row[s].length===0
+                                    ?<span style={{color:"#d1d5db",fontSize:10}}>—</span>
+                                    :<div style={{display:"flex",flexWrap:"wrap",gap:2}}>
+                                      {row[s].map(name=>(
+                                        <span key={name}
+                                          style={{background:"#fed7aa",borderColor:"#f97316",color:"#9a3412",padding:"2px 4px 2px 6px",borderRadius:3,fontSize:11,border:"1px solid #f97316",fontWeight:600,display:"inline-flex",alignItems:"center",gap:2}}
+                                          title={name+" — Day Call"}>
+                                          <span onClick={e=>handleBadgeClick(e,name,row.date,s)} style={{cursor:"pointer"}}>{name}
+                                            {levelMap[name]&&<span style={{fontSize:8.5,opacity:0.65,fontWeight:500}}>·{levelMap[name]}</span>}
+                                          </span>
+                                          <span onClick={e=>{e.stopPropagation();handleDelete(name,row.date,s);}}
+                                            title="Remove day call"
+                                            style={{marginLeft:2,cursor:"pointer",color:"#b45309",fontWeight:700,fontSize:12,lineHeight:1,opacity:0.7,padding:"0 1px"}}
+                                            onMouseEnter={e=>e.currentTarget.style.opacity=1}
+                                            onMouseLeave={e=>e.currentTarget.style.opacity=0.7}>×</span>
+                                        </span>
+                                      ))}
+                                    </div>}
+                                  <button
+                                    onClick={e=>{e.stopPropagation();setAddTarget(isPickerOpen?null:{date:row.date,slot:s});setAddSearch("");}}
+                                    title="Add day call resident"
+                                    style={{position:"absolute",bottom:2,right:3,fontSize:11,lineHeight:1,fontWeight:700,
+                                      padding:"0 5px",borderRadius:3,border:"1px solid #f97316",
+                                      background:isPickerOpen?"#f97316":"#fff7ed",
+                                      color:isPickerOpen?"#fff":"#b45309",cursor:"pointer",opacity:0.8}}>
+                                    +
+                                  </button>
+                                  {isPickerOpen&&(
+                                    <div onClick={e=>e.stopPropagation()}
+                                      style={{position:"absolute",bottom:"100%",right:0,zIndex:100,
+                                        background:"#fff",border:"1px solid #fed7aa",borderRadius:6,
+                                        boxShadow:"0 6px 20px rgba(0,0,0,0.18)",width:175,
+                                        display:"flex",flexDirection:"column",overflow:"hidden"}}>
+                                      <div style={{padding:"5px 7px",borderBottom:"1px solid #fed7aa",background:"#fff7ed",
+                                        fontSize:9.5,fontWeight:700,color:"#9a3412",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                                        <span>Add to {dcSlotLabel[s]}</span>
+                                        <button onClick={()=>setAddTarget(null)} style={{background:"none",border:"none",cursor:"pointer",color:"#94a3b8",fontSize:13,lineHeight:1}}>×</button>
+                                      </div>
+                                      <input autoFocus placeholder="Search…" value={addSearch} onChange={e=>setAddSearch(e.target.value)}
+                                        onClick={e=>e.stopPropagation()}
+                                        style={{padding:"4px 8px",fontSize:11,border:"none",borderBottom:"1px solid #fed7aa",outline:"none"}}/>
+                                      <div style={{maxHeight:200,overflowY:"auto"}}>
+                                        {filteredDC.length===0&&<div style={{padding:"8px 10px",fontSize:10.5,color:"#94a3b8"}}>No match</div>}
+                                        {filteredDC.map(name=>(
+                                          <div key={name} onClick={()=>{handleAddToSlot(name,row.date,s);setAddTarget(null);}}
+                                            style={{padding:"6px 10px",fontSize:11.5,cursor:"pointer",borderBottom:"1px solid #fef3c7",
+                                              display:"flex",alignItems:"center",gap:4}}
+                                            onMouseEnter={e=>e.currentTarget.style.background="#fff7ed"}
+                                            onMouseLeave={e=>e.currentTarget.style.background="#fff"}>
+                                            <span style={{flex:1,fontWeight:600}}>{name}</span>
+                                            <span style={{fontSize:9,color:"#94a3b8"}}>{levelMap[name]||""}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </td>
+                              );
+                            })
+                          }
+                          {/* Night call columns */}
+                          {slots.map(s=>{
+                            const isPickerOpen=addTarget?.date===row.date&&addTarget?.slot===s;
+                            const lvOrder=["R4","R3","R2","R1","EXT"];
+                            const allNames=lvOrder.flatMap(lv=>Object.keys(levelMap).filter(n=>levelMap[n]===lv&&!row[s].includes(n)));
+                            const filtered=addSearch?allNames.filter(n=>n.toLowerCase().includes(addSearch.toLowerCase())):allNames;
+                            return(
+                            <td key={s} onClick={e=>{e.stopPropagation();handleCellClick(row.date,s);}}
+                              style={{...getCellStyle(isWE,row.date,s),borderBottom:bb,position:"relative",verticalAlign:"top",paddingBottom:18}}>
+                              {row[s].length===0
+                                ?<span style={{color:"#d1d5db",fontSize:10}}>—</span>
+                                :<div style={{display:"flex",flexWrap:"wrap",gap:2}}>
+                                  {row[s].map(name=>(
+                                    <span key={name} onClick={e=>handleBadgeClick(e,name,row.date,s)}
+                                      style={getBadgeStyle(name,row.date,s)} title={`${name} (${rotationMap[name]||""}) — click to select`}>
+                                      {name}
+                                      {levelMap[name]&&<span style={{fontSize:8.5,opacity:0.65,fontWeight:500}}>·{levelMap[name]}</span>}
+                                    </span>
+                                  ))}
+                                </div>}
+                              <button
+                                onClick={e=>{e.stopPropagation();setAddTarget(isPickerOpen?null:{date:row.date,slot:s});setAddSearch("");}}
+                                title="Add resident to this slot"
+                                style={{position:"absolute",bottom:2,right:3,fontSize:11,lineHeight:1,fontWeight:700,
+                                  padding:"0 5px",borderRadius:3,border:"1px solid #94a3b8",
+                                  background:isPickerOpen?"#1e3a5f":"#f1f5f9",
+                                  color:isPickerOpen?"#fff":"#475569",cursor:"pointer",opacity:0.7}}>
+                                +
+                              </button>
+                              {isPickerOpen&&(
+                                <div onClick={e=>e.stopPropagation()}
+                                  style={{position:"absolute",bottom:"100%",right:0,zIndex:100,
+                                    background:"#fff",border:"1px solid #cbd5e1",borderRadius:6,
+                                    boxShadow:"0 6px 20px rgba(0,0,0,0.18)",width:175,
+                                    display:"flex",flexDirection:"column",overflow:"hidden"}}>
+                                  <div style={{padding:"5px 7px",borderBottom:"1px solid #e2e8f0",background:"#f8fafc",
+                                    fontSize:9.5,fontWeight:700,color:"#1e293b",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                                    <span>Add to {slotLabel[s]}</span>
+                                    <button onClick={()=>setAddTarget(null)} style={{background:"none",border:"none",cursor:"pointer",color:"#94a3b8",fontSize:13,lineHeight:1}}>×</button>
+                                  </div>
+                                  <input
+                                    autoFocus
+                                    placeholder="Search…"
+                                    value={addSearch}
+                                    onChange={e=>setAddSearch(e.target.value)}
+                                    onClick={e=>e.stopPropagation()}
+                                    style={{padding:"4px 8px",fontSize:11,border:"none",borderBottom:"1px solid #e2e8f0",outline:"none"}}
+                                  />
+                                  <div style={{maxHeight:200,overflowY:"auto"}}>
+                                    {filtered.length===0&&<div style={{padding:"8px 10px",fontSize:10.5,color:"#94a3b8"}}>No match</div>}
+                                    {lvOrder.map(lv=>{
+                                      const lvNames=filtered.filter(n=>levelMap[n]===lv);
+                                      if(!lvNames.length)return null;
+                                      return(
+                                        <div key={lv}>
+                                          <div style={{padding:"3px 8px",fontSize:8.5,fontWeight:700,color:"#94a3b8",
+                                            background:"#f8fafc",textTransform:"uppercase",letterSpacing:"0.06em",
+                                            borderBottom:"1px solid #f1f5f9"}}>{lv}</div>
+                                          {lvNames.map(name=>(
+                                            <div key={name}
+                                              onClick={()=>handleAddToSlot(name,row.date,s)}
+                                              style={{padding:"5px 10px",fontSize:11,fontWeight:500,color:"#1e293b",
+                                                cursor:"pointer",borderBottom:"1px solid #f8fafc",display:"flex",
+                                                justifyContent:"space-between",alignItems:"center"}}
+                                              onMouseEnter={e=>e.currentTarget.style.background="#f0f9ff"}
+                                              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                                              <span>{name}</span>
+                                              <span style={{fontSize:9,color:"#94a3b8"}}>{rotationMap[name]||""}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+                            </td>
+                            );
+                          })}
+                      </tr>
+                    );
+                  })}
+                </>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <AvailabilityPanel sched={sched}/>
+      </div>
+      {moveLog.length>0&&(
+        <div onClick={e=>e.stopPropagation()} style={{marginTop:8,background:"#fff",borderRadius:8,border:"1px solid #e2e8f0",boxShadow:"0 1px 4px rgba(0,0,0,0.06)",overflow:"hidden"}}>
+          <div style={{background:"#1e293b",color:"#94a3b8",fontSize:9.5,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",padding:"5px 12px"}}>Move History</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:0}}>
+            {moveLog.map((m,i)=>(
+              <div key={i} style={{padding:"5px 12px",borderRight:"1px solid #f1f5f9",borderBottom:"1px solid #f1f5f9",background:i===0?"#fffbeb":"#fff",minWidth:200,flex:"1 1 200px"}}>
+                <div style={{fontSize:10.5,fontWeight:600,color:"#1e293b",lineHeight:1.3}}>
+                  {m.hasWarn&&<span style={{color:"#d97706",marginRight:3}}>⚠️</span>}{m.text}
+                </div>
+                <div style={{fontSize:9.5,color:"#9ca3af",marginTop:1}}>{m.time}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      </React.Fragment>
+      ))}
+
+      <div style={{marginTop:6,fontSize:10,color:"#94a3b8",textAlign:"center"}}>
+        ANY CHANGE IN DUTY IS NOT ALLOWED UNLESS APPROVED BY HEAD OF DEPARTMENT · Dr. Thuraya Alsaffar · Dr. Zaki Alnemer
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+  </script>
+</body>
+</html>
+
+
