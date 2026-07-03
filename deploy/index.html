@@ -21,7 +21,13 @@
   <script type="text/babel">
 const { useState, useEffect } = React;
 
-const initialSchedule = [
+// Backend base URL for the resident database API (see backend/app.py). If
+// it's unreachable (e.g. this build published standalone to Netlify, where
+// the backend isn't deployed), the app falls back to the DEFAULT_* snapshots
+// below so it always renders -- see the bootstrap fetch in App().
+const API_BASE = "http://localhost:5000";
+
+const DEFAULT_initialSchedule = [
   { date:"Jul 5", greg:"05/07", hijri:"20 Muh", day:"Sun", type:"WD", SO:["H.Saif"], NICU:["Dina"], PICU:["Z.Sairafi"], PMW:["A.Darora"], DC_NICU:["H.Amrad"], DC_PMW:["Reem","A.Qassab"] },
   { date:"Jul 6", greg:"06/07", hijri:"21 Muh", day:"Mon", type:"WD", SO:["F.Saffar"], NICU:["A.Ibrahim"], PICU:["Abdulla"], PMW:["Sajad"], DC_NICU:["Sajad"], DC_PMW:["Abdulla","A.Ibrahim"] },
   { date:"Jul 7", greg:"07/07", hijri:"22 Muh", day:"Tue", type:"WD", SO:["H.Jalood"], NICU:["Mustafa"], PICU:["Yasir"], PMW:["Wasayif"], DC_NICU:["Yasir"], DC_PMW:["H.Albaiek","A.Rashid"] },
@@ -51,9 +57,12 @@ const initialSchedule = [
   { date:"Jul 31", greg:"31/07", hijri:"16 Saf", day:"Fri", type:"WE", SO:["H.Saif","Arwa"], NICU:["Yasir"], PICU:["Shahad"], PMW:["A.Dayin"], DC_NICU:[], DC_PMW:[] },
   { date:"Aug 1", greg:"01/08", hijri:"17 Saf", day:"Sat", type:"WE", SO:["Reem"], NICU:["Sara"], PICU:["Anwar"], PMW:["Z.Aman"], DC_NICU:[], DC_PMW:[] }
 ];
+// Mutable binding: reassigned in place if the backend bootstrap fetch succeeds
+// (see App()), otherwise stays equal to the DEFAULT_* snapshot above.
+let initialSchedule = DEFAULT_initialSchedule;
 
 // ── Resident metadata ─────────────────────────────────────────────────────────
-const rotationMap = {
+const DEFAULT_rotationMap = {
   "H.Amrad":"NICU","Z.Sairafi":"NICU","Sajad":"NICU","Yasir":"NICU","Sajidah":"NICU","A.Basarah":"NICU","M.Hajji":"NICU",
   "F.Saffar":"PICU","Shahad":"PICU","A.Darora":"PICU","A.Dayin":"PICU",
   "A.Qassab":"GP","Qasim":"GP","Abdulla":"GP","Sara":"GP","Z.Aman":"GP","Z.Madeh":"GP","Z.Madan":"GP","Anwar":"GP","F.Ghanim":"GP","S.Zaidani":"GP",
@@ -63,24 +72,30 @@ const rotationMap = {
   "Z.Alwan":"ANEST","Z.Abdulmohsen":"ANEST","A.Ibrahim":"RESEARCH",
   "Musawi":"PEM","Malak":"RHEUMA","F.Hamood":"GP","O.Alsaihati":"GP",
 };
-const levelMap = {
+let rotationMap = DEFAULT_rotationMap;
+const DEFAULT_levelMap = {
   "Dina":"R4","M.Khadhrawi":"R4","Mustafa":"R4","A.Musalllam":"R4","A.Qassab":"R4",
   "H.Saif":"R3","H.Jalood":"R3","H.Amrad":"R3","Reem":"R3","Safia":"R3","Z.Sairafi":"R3","F.Saffar":"R3","Sara":"R3","Arwa":"R3","A.Ibrahim":"R3",
   "Sajad":"R2","Yasir":"R2","Shahad":"R2","A.Darora":"R2","Wasayif":"R2","A.Rashid":"R2","Qasim":"R2","H.Albaiek":"R3","Abdulla":"R2",
   "Sajidah":"R1","A.Dayin":"R1","A.Basarah":"R1","M.Hajji":"R1","Z.Alwan":"R1","Z.Abdulmohsen":"R1","Z.Aman":"R1","Z.Madeh":"R1","Z.Madan":"R1","Anwar":"R1","F.Ghanim":"R1","S.Zaidani":"R1",
   "Musawi":"EXT","Malak":"EXT","F.Hamood":"EXT","O.Alsaihati":"EXT",
 };
+let levelMap = DEFAULT_levelMap;
 
-// Filter groups
-const filterGroups = {
-  "NICU Team": new Set(["H.Amrad","Z.Sairafi","Sajad","Yasir","Sajidah","A.Basarah","M.Hajji"]),
-  "PICU Team": new Set(["F.Saffar","Shahad","A.Darora","A.Dayin"]),
-  "R4": new Set(Object.keys(levelMap).filter(k=>levelMap[k]==="R4")),
-  "R3": new Set(Object.keys(levelMap).filter(k=>levelMap[k]==="R3")),
-  "R2": new Set(Object.keys(levelMap).filter(k=>levelMap[k]==="R2")),
-  "R1": new Set(Object.keys(levelMap).filter(k=>levelMap[k]==="R1")),
-  "GP Team": new Set(["A.Qassab","Qasim","Abdulla","Sara","Z.Aman","Z.Madeh","Z.Madan","Anwar","F.Ghanim","S.Zaidani"]),
-};
+// Filter groups (the R4/R3/R2/R1 subsets are derived from levelMap, so this is
+// rebuilt via buildFilterGroups() after a successful bootstrap fetch too)
+function buildFilterGroups(){
+  return {
+    "NICU Team": new Set(["H.Amrad","Z.Sairafi","Sajad","Yasir","Sajidah","A.Basarah","M.Hajji"]),
+    "PICU Team": new Set(["F.Saffar","Shahad","A.Darora","A.Dayin"]),
+    "R4": new Set(Object.keys(levelMap).filter(k=>levelMap[k]==="R4")),
+    "R3": new Set(Object.keys(levelMap).filter(k=>levelMap[k]==="R3")),
+    "R2": new Set(Object.keys(levelMap).filter(k=>levelMap[k]==="R2")),
+    "R1": new Set(Object.keys(levelMap).filter(k=>levelMap[k]==="R1")),
+    "GP Team": new Set(["A.Qassab","Qasim","Abdulla","Sara","Z.Aman","Z.Madeh","Z.Madan","Anwar","F.Ghanim","S.Zaidani"]),
+  };
+}
+let filterGroups = buildFilterGroups();
 
 const filterColors = {
   "NICU Team": { active:"#1d4ed8", light:"#dbeafe", text:"#1e3a8a" },
@@ -106,8 +121,10 @@ const noSundayRes    = new Set(["Reem"]);
 const r1Res          = new Set(["Sajidah","A.Dayin","A.Basarah","M.Hajji","Z.Alwan","Z.Abdulmohsen","Z.Aman","Z.Madeh","Z.Madan","Anwar","F.Ghanim","S.Zaidani"]);
 const nicuUnit       = new Set(["H.Amrad","Z.Sairafi","Sajad","Yasir","Sajidah","A.Basarah","M.Hajji"]);
 const picuUnit       = new Set(["F.Saffar","Shahad","A.Darora","A.Dayin"]);
-const unwantedDays   = {"Dina":["Jul 31","Aug 1"],"Mustafa":["Jul 26","Aug 1"],"Yasir":["Jul 10","Jul 11"],"Shahad":["Jul 16","Jul 17","Jul 18","Jul 19","Jul 27","Jul 28","Jul 29"],"A.Rashid":["Jul 31","Aug 1"],"Z.Alwan":["Jul 12","Jul 13"],"Z.Madeh":["Jul 17","Jul 18"],"Z.Madan":["Jul 31","Aug 1"],"Anwar":["Jul 8","Jul 9"],"F.Ghanim":["Jul 7","Jul 30","Jul 31","Aug 1"],"S.Zaidani":["Jul 5","Jul 6"]};
-const vacationWeeks  = {"A.Qassab":["W2","W3","W4"],"Safia":["W1","W2"],"Arwa":["W1","W2"],"A.Ibrahim":["W3","W4"],"Shahad":["W1","W2"],"Wasayif":["W3","W4"],"Abdulla":["W2","W3","W4"],"H.Salman":["W1","W2","W3","W4"],"Z.Alwan":["W1"],"Z.Abdulmohsen":["W1","W2"],"Z.Aman":["W2","W3"],"Z.Madeh":["W3","W4"],"Z.Madan":["W1","W2"]};
+const DEFAULT_unwantedDays = {"Dina":["Jul 31","Aug 1"],"Mustafa":["Jul 26","Aug 1"],"Yasir":["Jul 10","Jul 11"],"Shahad":["Jul 16","Jul 17","Jul 18","Jul 19","Jul 27","Jul 28","Jul 29"],"A.Rashid":["Jul 31","Aug 1"],"Z.Alwan":["Jul 12","Jul 13"],"Z.Madeh":["Jul 17","Jul 18"],"Z.Madan":["Jul 31","Aug 1"],"Anwar":["Jul 8","Jul 9"],"F.Ghanim":["Jul 7","Jul 30","Jul 31","Aug 1"],"S.Zaidani":["Jul 5","Jul 6"]};
+let unwantedDays = DEFAULT_unwantedDays;
+const DEFAULT_vacationWeeks = {"A.Qassab":["W2","W3","W4"],"Safia":["W1","W2"],"Arwa":["W1","W2"],"A.Ibrahim":["W3","W4"],"Shahad":["W1","W2"],"Wasayif":["W3","W4"],"Abdulla":["W2","W3","W4"],"H.Salman":["W1","W2","W3","W4"],"Z.Alwan":["W1"],"Z.Abdulmohsen":["W1","W2"],"Z.Aman":["W2","W3"],"Z.Madeh":["W3","W4"],"Z.Madan":["W1","W2"]};
+let vacationWeeks = DEFAULT_vacationWeeks;
 
 function getWeek(d){if(["Jul 5","Jul 6","Jul 7","Jul 8","Jul 9","Jul 10","Jul 11"].includes(d))return"W1";if(["Jul 12","Jul 13","Jul 14","Jul 15","Jul 16","Jul 17","Jul 18"].includes(d))return"W2";if(["Jul 19","Jul 20","Jul 21","Jul 22","Jul 23","Jul 24","Jul 25"].includes(d))return"W3";return"W4";}
 
@@ -502,7 +519,7 @@ function ResidentPanel({ name, sched, selected, setSelected, onClose, onDelete, 
 }
 
 // ── Resident profiles ─────────────────────────────────────────────────────────
-const residentProfiles = [
+const DEFAULT_residentProfiles = [
   {name:"Dina",        level:"R4",rotation:"ALL/IMM", vacation:"None",        unwanted:"Jul 31, Aug 1",          leaveBlock11:"None",constraints:["No Saturday","No Monday"],                                                       notes:"Reduced calls – leave Block 10"},
   {name:"M.Khadhrawi", level:"R4",rotation:"OPD",     vacation:"None",        unwanted:"None",                   leaveBlock11:"None",constraints:["No Sun/Mon first 2 days of block"],                                             notes:""},
   {name:"Mustafa",     level:"R4",rotation:"ALL/IMM", vacation:"None",        unwanted:"Jul 26, Aug 1",          leaveBlock11:"None",constraints:["No Monday"],                                                                    notes:""},
@@ -544,6 +561,7 @@ const residentProfiles = [
   {name:"F.Hamood",      level:"EXT",rotation:"GP",     vacation:"None",        unwanted:"None",                   leaveBlock11:"None",constraints:[],                                                                               notes:"External FM R1 sub-rotator. Contact: 0583203530"},
   {name:"O.Alsaihati",  level:"EXT",rotation:"GP",     vacation:"None",        unwanted:"None",                   leaveBlock11:"None",constraints:[],                                                                               notes:"External FM R1 sub-rotator. Contact: 0562419342"},
 ];
+let residentProfiles = DEFAULT_residentProfiles;
 
 const levelColors={R4:{hdr:"#1e3a8a",light:"#dbeafe",tx:"#1e3a8a"},R3:{hdr:"#166534",light:"#dcfce7",tx:"#14532d"},R2:{hdr:"#92400e",light:"#fef3c7",tx:"#78350f"},R1:{hdr:"#6b21a8",light:"#f3e8ff",tx:"#581c87"},EXT:{hdr:"#9a3412",light:"#fed7aa",tx:"#7c2d12"}};
 const slotTagColors={"Senior Overall":{bg:"#eff6ff",tx:"#1e3a5f"},NICU:{bg:"#dbeafe",tx:"#1d4ed8"},PICU:{bg:"#fce7f3",tx:"#9d174d"},PMW:{bg:"#d1fae5",tx:"#065f46"}};
@@ -655,7 +673,7 @@ function ResidentTracker({sched,spotlight,setSpotlight,setSelected,setWarnings})
 }
 
 // ── Master Rota Page ─────────────────────────────────────────────────────────
-const BLOCK_DATES=[
+const DEFAULT_BLOCK_DATES=[
   {label:"B1",  greg:"28/9–25/10",  n:1,  sy:2025,sm:9, sd:28},
   {label:"B2",  greg:"26/10–22/11", n:2,  sy:2025,sm:10,sd:26},
   {label:"B3",  greg:"23/11–20/12", n:3,  sy:2025,sm:11,sd:23},
@@ -670,7 +688,8 @@ const BLOCK_DATES=[
   {label:"B12", greg:"2/8–29/8",    n:12, sy:2026,sm:8, sd:2},
   {label:"B13", greg:"30/8–29/9",   n:13, sy:2026,sm:8, sd:30},
 ];
-const BLOCK_VACATIONS={
+let BLOCK_DATES = DEFAULT_BLOCK_DATES;
+const DEFAULT_BLOCK_VACATIONS={
   1:{"Erum":["W3"],"H.Albaiek":["W1"]},
   2:{"H.Albaiek":["W1"],"H.Saif":["W1"],"Arwa":["W4"]},
   3:{"Arwa":["W1"],"Reem":["W2"]},
@@ -685,7 +704,8 @@ const BLOCK_VACATIONS={
   12:{"Sajidah":["W1"],"Reem":["W2"],"S.Zaidani":["W3"],"Z.Sairafi":["W1"],"Anwar":["W3"],"Z.Alsaleh":["W2"],"Wasayif":["W1"],"H.Amrad":["W3"],"Qasim":["W2"],"A.Rashid":["W1"],"Z.Khowaildi":["W1"],"F.Saffar":["W2"],"Sajad":["W1"]},
   13:{"Sajad":["W1"],"A.Dayin":["W3"],"Z.Abdulmohsen":["W3"],"A.Marzooq":["W1"],"F.Ghanim":["W4"],"Sara":["W3"],"Sajidah":["W3"],"A.Darora":["W3"],"Yasir":["W3"],"M.Khadhrawi":["W1","W2","W3","W4"],"Mustafa":["W1","W2","W3","W4"],"Dina":["W1","W2","W3","W4"],"A.Musalllam":["W1","W2","W3","W4"],"A.Qassab":["W1","W2","W3","W4"]},
 };
-const MASTER_ROTA=[
+let BLOCK_VACATIONS = DEFAULT_BLOCK_VACATIONS;
+const DEFAULT_MASTER_ROTA=[
   // R4
   {name:"M.Khadhrawi", full:"Mohammed Mussa Al Khadhrawi",  lv:"R4", b:["ELECTIVE","ER","GP","NICU","GEN/MET","GP","RHEUMA","NEPHRO","PICU","ALL/IMM","OPD","ELECTIVE","V"]},
   {name:"Mustafa",     full:"Mustafa Moh'd Al Shammasi",    lv:"R4", b:["NICU","PULMO","OPD","ER","GP/GI","NEPHRO","PICU","GEN/MET","GP","ELECTIVE","ALL/IMM","RHEUMA","V"]},
@@ -740,6 +760,7 @@ const MASTER_ROTA=[
   {name:"Entisar",     full:"Entisar Alawami",               lv:"R1", b:["GP","ANESSIM","GP","ER","WBC","GP/V","GP","PICU","GP","NICU","PHC","GP/V","NICU"]},
   {name:"Z.Abdulmohsen",full:"Zahra Abdulmohsen",            lv:"R1", b:["GP","WBC","GP","NICU","GP/V","PICU","NICU","PHC","GP","GP","ANESSIM","ER","GP/V"]},
 ];
+let MASTER_ROTA = DEFAULT_MASTER_ROTA;
 
 function MasterRotaPage(){
   const[search,setSearch]=useState("");
@@ -1428,6 +1449,38 @@ function App(){
   const[saveMsg,setSaveMsg] =useState("");
   const[addTarget,setAddTarget]=useState(null); // {date,slot} for the resident-picker dropdown
   const[addSearch,setAddSearch]=useState("");
+  const[dataSource,setDataSource]=useState("loading"); // "loading" | "live" | "fallback"
+
+  // ── Fetch resident data from the backend on load; fall back to the
+  // DEFAULT_* snapshots above if it's unreachable (e.g. published standalone
+  // to Netlify, where the backend isn't deployed). Read-only: this hydrates
+  // the app's initial data, it doesn't sync schedule edits back. ──
+  useEffect(()=>{
+    let cancelled=false;
+    fetch(`${API_BASE}/api/block11/bootstrap`)
+      .then(r=>{ if(!r.ok) throw new Error(`status ${r.status}`); return r.json(); })
+      .then(data=>{
+        if(cancelled) return;
+        rotationMap=data.rotationMap;
+        levelMap=data.levelMap;
+        vacationWeeks=data.vacationWeeks;
+        unwantedDays=data.unwantedDays;
+        residentProfiles=data.residentProfiles;
+        initialSchedule=data.initialSchedule;
+        MASTER_ROTA=data.masterRota;
+        BLOCK_VACATIONS=data.blockVacations;
+        BLOCK_DATES=data.blockDates;
+        filterGroups=buildFilterGroups();
+        // Only replace the schedule state if there's no in-progress local
+        // edit already saved -- localStorage, when present, always wins.
+        if(!localStorage.getItem('block11_sched')){
+          setSched(deepClone(initialSchedule));
+        }
+        setDataSource("live");
+      })
+      .catch(()=>{ if(!cancelled) setDataSource("fallback"); });
+    return ()=>{ cancelled=true; };
+  },[]);
 
   // ── Is a resident highlighted by the active filter or spotlight? ──
   const isHighlighted = name => {
@@ -1610,7 +1663,36 @@ function App(){
         const dcn=JSON.stringify(row.DC_NICU||[]),dcp=JSON.stringify(row.DC_PMW||[]);
         return `  { date:"${row.date}", greg:"${row.greg}", hijri:"${row.hijri}", day:"${row.day}", type:"${row.type}", SO:${so}, NICU:${nicu}, PICU:${picu}, PMW:${pmw}, DC_NICU:${dcn}, DC_PMW:${dcp} }`;
       });
-      const newBlock='const initialSchedule = [\n'+lines.join(',\n')+'\n];';
+      const newBlock='const initialSchedule = [
+  { date:"Jul 5", greg:"05/07", hijri:"20 Muh", day:"Sun", type:"WD", SO:["H.Saif"], NICU:["Dina"], PICU:["Z.Sairafi"], PMW:["A.Darora"], DC_NICU:["H.Amrad"], DC_PMW:["Reem","A.Qassab"] },
+  { date:"Jul 6", greg:"06/07", hijri:"21 Muh", day:"Mon", type:"WD", SO:["F.Saffar"], NICU:["A.Ibrahim"], PICU:["Abdulla"], PMW:["Sajad"], DC_NICU:["Sajad"], DC_PMW:["Abdulla","A.Ibrahim"] },
+  { date:"Jul 7", greg:"07/07", hijri:"22 Muh", day:"Tue", type:"WD", SO:["H.Jalood"], NICU:["Mustafa"], PICU:["Yasir"], PMW:["Wasayif"], DC_NICU:["Yasir"], DC_PMW:["H.Albaiek","A.Rashid"] },
+  { date:"Jul 8", greg:"08/07", hijri:"23 Muh", day:"Wed", type:"WD", SO:["Reem","Malak"], NICU:["A.Basarah","A.Qassab"], PICU:["A.Dayin","S.Zaidani"], PMW:["Z.Madeh"], DC_NICU:["M.Hajji"], DC_PMW:["H.Saif","Z.Madeh"] },
+  { date:"Jul 9", greg:"09/07", hijri:"24 Muh", day:"Thu", type:"WE", SO:["H.Albaiek"], NICU:["H.Amrad"], PICU:["A.Darora"], PMW:["Sajidah","F.Ghanim"], DC_NICU:["Sajidah"], DC_PMW:["Qasim","Z.Aman"] },
+  { date:"Jul 10", greg:"10/07", hijri:"25 Muh", day:"Fri", type:"WE", SO:["A.Ibrahim"], NICU:["Z.Sairafi"], PICU:["Wasayif","Qasim"], PMW:["M.Hajji"], DC_NICU:[], DC_PMW:[] },
+  { date:"Jul 11", greg:"11/07", hijri:"26 Muh", day:"Sat", type:"WE", SO:["Sara"], NICU:["Dina"], PICU:["A.Rashid"], PMW:["Z.Madeh"], DC_NICU:[], DC_PMW:[] },
+  { date:"Jul 12", greg:"12/07", hijri:"27 Muh", day:"Sun", type:"WD", SO:["H.Saif","H.Jalood"], NICU:["M.Khadhrawi","Yasir"], PICU:["A.Dayin"], PMW:["Sajidah","Anwar"], DC_NICU:["A.Basarah"], DC_PMW:["F.Ghanim","A.Ibrahim"] },
+  { date:"Jul 13", greg:"13/07", hijri:"28 Muh", day:"Mon", type:"WD", SO:["F.Saffar","Reem"], NICU:["A.Musalllam","Sajad"], PICU:["S.Zaidani"], PMW:["A.Basarah"], DC_NICU:["M.Hajji"], DC_PMW:["Z.Madeh","H.Saif"] },
+  { date:"Jul 14", greg:"14/07", hijri:"29 Muh", day:"Tue", type:"WD", SO:["A.Ibrahim","H.Albaiek"], NICU:["Qasim","H.Amrad"], PICU:["A.Darora","Wasayif"], PMW:["M.Hajji","F.Ghanim"], DC_NICU:["Yasir"], DC_PMW:["Anwar","Qasim"] },
+  { date:"Jul 15", greg:"15/07", hijri:"30 Muh", day:"Wed", type:"WD", SO:["Sara"], NICU:["Dina","Sajidah"], PICU:["A.Rashid","Anwar"], PMW:["Z.Madeh"], DC_NICU:["Sajad"], DC_PMW:["Z.Alwan","A.Rashid"] },
+  { date:"Jul 16", greg:"16/07", hijri:"01 Saf", day:"Thu", type:"WE", SO:["H.Saif"], NICU:["Yasir"], PICU:["A.Dayin"], PMW:["S.Zaidani"], DC_NICU:["Sajidah"], DC_PMW:["F.Ghanim","H.Jalood"] },
+  { date:"Jul 17", greg:"17/07", hijri:"02 Saf", day:"Fri", type:"WE", SO:["F.Saffar"], NICU:["M.Khadhrawi"], PICU:["Sajad"], PMW:["A.Basarah","Z.Alwan"], DC_NICU:[], DC_PMW:["F.Hamood"] },
+  { date:"Jul 18", greg:"18/07", hijri:"03 Saf", day:"Sat", type:"WE", SO:["H.Jalood"], NICU:["Mustafa"], PICU:["Qasim"], PMW:["F.Ghanim"], DC_NICU:[], DC_PMW:["O.Alsaihati"] },
+  { date:"Jul 19", greg:"19/07", hijri:"04 Saf", day:"Sun", type:"WD", SO:["H.Amrad"], NICU:["H.Albaiek"], PICU:["A.Darora"], PMW:["M.Hajji","Z.Madan"], DC_NICU:["A.Basarah"], DC_PMW:["Z.Abdulmohsen","Sara"] },
+  { date:"Jul 20", greg:"20/07", hijri:"05 Saf", day:"Mon", type:"WD", SO:["Sara"], NICU:["Z.Sairafi","A.Rashid"], PICU:["A.Basarah","A.Dayin"], PMW:["S.Zaidani"], DC_NICU:["Yasir"], DC_PMW:["S.Zaidani","Arwa"] },
+  { date:"Jul 21", greg:"21/07", hijri:"06 Saf", day:"Tue", type:"WD", SO:["H.Saif"], NICU:["M.Khadhrawi","Yasir"], PICU:["Shahad","Qasim"], PMW:["Sajidah"], DC_NICU:["Sajidah"], DC_PMW:["F.Ghanim","H.Jalood"] },
+  { date:"Jul 22", greg:"22/07", hijri:"07 Saf", day:"Wed", type:"WD", SO:["F.Saffar","Arwa"], NICU:["Mustafa"], PICU:["M.Hajji","F.Ghanim"], PMW:["Z.Abdulmohsen","Anwar"], DC_NICU:["M.Hajji"], DC_PMW:["Anwar","A.Rashid"] },
+  { date:"Jul 23", greg:"23/07", hijri:"08 Saf", day:"Thu", type:"WE", SO:["Reem","Malak"], NICU:["Sajad"], PICU:["Z.Madan"], PMW:["A.Basarah"], DC_NICU:["Sajad"], DC_PMW:["Z.Madan","Sara"] },
+  { date:"Jul 24", greg:"24/07", hijri:"09 Saf", day:"Fri", type:"WE", SO:["H.Albaiek"], NICU:["Sajidah","H.Amrad"], PICU:["A.Darora"], PMW:["S.Zaidani"], DC_NICU:[], DC_PMW:["O.Alsaihati"] },
+  { date:"Jul 25", greg:"25/07", hijri:"10 Saf", day:"Sat", type:"WE", SO:["H.Jalood"], NICU:["A.Musalllam"], PICU:["A.Rashid"], PMW:["Anwar"], DC_NICU:[], DC_PMW:["F.Hamood"] },
+  { date:"Jul 26", greg:"26/07", hijri:"11 Saf", day:"Sun", type:"WD", SO:["Sara","Arwa"], NICU:["Z.Sairafi"], PICU:["Shahad","A.Basarah"], PMW:["Z.Abdulmohsen","F.Ghanim"], DC_NICU:["A.Basarah"], DC_PMW:["S.Zaidani","Safia"] },
+  { date:"Jul 27", greg:"27/07", hijri:"12 Saf", day:"Mon", type:"WD", SO:["Reem","Malak"], NICU:["Sajad","Qasim"], PICU:["A.Dayin"], PMW:["M.Hajji","Z.Madan"], DC_NICU:["M.Hajji"], DC_PMW:["Anwar","Qasim"] },
+  { date:"Jul 28", greg:"28/07", hijri:"13 Saf", day:"Tue", type:"WD", SO:["H.Albaiek"], NICU:["H.Amrad"], PICU:["S.Zaidani"], PMW:["Sajidah"], DC_NICU:["Sajidah"], DC_PMW:["Z.Aman","H.Albaiek"] },
+  { date:"Jul 29", greg:"29/07", hijri:"14 Saf", day:"Wed", type:"WD", SO:["H.Jalood","Safia"], NICU:["A.Musalllam","A.Rashid"], PICU:["Z.Aman","F.Ghanim"], PMW:["Anwar"], DC_NICU:["A.Basarah"], DC_PMW:["Z.Abdulmohsen","Reem"] },
+  { date:"Jul 30", greg:"30/07", hijri:"15 Saf", day:"Thu", type:"WE", SO:["F.Saffar"], NICU:["Z.Sairafi"], PICU:["M.Hajji"], PMW:["Z.Abdulmohsen"], DC_NICU:["Z.Sairafi"], DC_PMW:["Z.Madan","Arwa"] },
+  { date:"Jul 31", greg:"31/07", hijri:"16 Saf", day:"Fri", type:"WE", SO:["H.Saif","Arwa"], NICU:["Yasir"], PICU:["Shahad"], PMW:["A.Dayin"], DC_NICU:[], DC_PMW:[] },
+  { date:"Aug 1", greg:"01/08", hijri:"17 Saf", day:"Sat", type:"WE", SO:["Reem"], NICU:["Sara"], PICU:["Anwar"], PMW:["Z.Aman"], DC_NICU:[], DC_PMW:[] }
+];';
       const updated=html.replace(/const initialSchedule = \[[\s\S]*?\];/,newBlock);
       const result=await fetch('/publish',{method:'POST',headers:{'Content-Type':'text/html'},body:updated});
       if(result.ok){setPublishMsg("Published! ✓");}else{setPublishMsg("Server error — is server.py running?");}
@@ -1665,6 +1747,11 @@ function App(){
             <div style={{fontSize:15,fontWeight:800,color:"#1e3a5f"}}>QHN — Duty Rota Block #11</div>
             <div style={{fontSize:11,color:"#475569",marginTop:1}}>05/07/2026 – 01/08/2026 · 20 Muharram – 17 Safar 1448</div>
             <div style={{fontSize:11,color:"#64748b"}}>Acting Chief Resident: <strong>Hassan AlSaif</strong></div>
+            <div style={{fontSize:9.5,color:"#94a3b8",marginTop:2}}>
+              {dataSource==="loading"&&"⏳ Loading resident data…"}
+              {dataSource==="live"&&"🟢 Live data (backend)"}
+              {dataSource==="fallback"&&"⚪ Offline snapshot (backend unreachable)"}
+            </div>
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:5,alignItems:"flex-end"}}>
             <div style={{display:"flex",gap:4,flexWrap:"wrap",justifyContent:"flex-end"}}>
