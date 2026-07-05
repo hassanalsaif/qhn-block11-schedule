@@ -76,6 +76,12 @@ const DEFAULT_initialSchedule = [
 // (see App()), otherwise stays equal to the DEFAULT_* snapshot above.
 let initialSchedule = DEFAULT_initialSchedule;
 
+// Baseline for the Daytime Coverage manual overrides ("date|name" -> status).
+// Kept in sync with the live overrides by the Save button, the same way
+// DEFAULT_initialSchedule is kept in sync with the live schedule -- so a
+// visitor with no localStorage still sees the last-published overrides.
+const DEFAULT_manualUnavail = {"Jul 5|F.Saffar":"unavailable","Jul 5|F.Ghanim":"unavailable","Jul 5|Z.Aman":"unavailable","Jul 5|Z.Madeh":"unavailable","Jul 5|Anwar":"unavailable","Jul 5|S.Zaidani":"unavailable","Jul 5|Sajidah":"unavailable","Jul 5|A.Basarah":"unavailable","Jul 5|M.Hajji":"unavailable","Jul 6|Sajidah":"unavailable","Jul 6|A.Basarah":"unavailable","Jul 6|M.Hajji":"unavailable","Jul 6|A.Dayin":"unavailable","Jul 6|Z.Aman":"unavailable","Jul 6|Z.Madeh":"unavailable","Jul 6|Anwar":"unavailable","Jul 6|F.Ghanim":"unavailable","Jul 6|S.Zaidani":"unavailable","Jul 7|Sajidah":"unavailable","Jul 7|A.Basarah":"unavailable","Jul 7|M.Hajji":"unavailable","Jul 7|A.Dayin":"unavailable","Jul 7|Z.Aman":"unavailable","Jul 7|Z.Madeh":"unavailable","Jul 7|Anwar":"unavailable","Jul 7|F.Ghanim":"unavailable","Jul 7|S.Zaidani":"unavailable","Jul 7|F.Hamood":"available","Jul 5|A.Dayin":"unavailable","Jul 5|A.Rashid":"postcall"};
+
 // ── Resident metadata ─────────────────────────────────────────────────────────
 const DEFAULT_rotationMap = {
   "H.Amrad":"NICU","Z.Sairafi":"NICU","Sajad":"NICU","Yasir":"NICU","Sajidah":"NICU","A.Basarah":"NICU","M.Hajji":"NICU",
@@ -1681,7 +1687,7 @@ function App(){
   // schedule-derived status (e.g. force someone available despite a vacation
   // week, or flag a same-day sick-out the base schedule wouldn't know about).
   const[manualUnavail,setManualUnavail]=useState(()=>{
-    try{const s=localStorage.getItem('block11_manualUnavail');return s?JSON.parse(s):{};}catch{return{};}
+    try{const s=localStorage.getItem('block11_manualUnavail');return s?JSON.parse(s):{...DEFAULT_manualUnavail};}catch{return{...DEFAULT_manualUnavail};}
   });
   useEffect(()=>{try{localStorage.setItem('block11_manualUnavail',JSON.stringify(manualUnavail));}catch{}},[manualUnavail]);
   const handleSetStatus=(date,name,value)=>{
@@ -1897,28 +1903,44 @@ function App(){
   const reset=()=>{if(isProduction)return;if(!window.confirm("Reset the entire schedule to the original template? This cannot be undone."))return;setSched(deepClone(initialSchedule));setHistory([]);setWarnings([]);setSelected(null);setMoveLog([]);};
   const handleExport=async()=>{setExporting(true);setExportErr("");try{await exportDocx(sched);}catch(err){console.error(err);setExportErr(err.message||"Export failed.");}finally{setExporting(false);}};
   useEffect(()=>{try{localStorage.setItem('block11_sched',JSON.stringify(sched));}catch{}}, [sched]);
-  const handleSave=()=>{
-    try{localStorage.setItem('block11_sched',JSON.stringify(sched));}catch{}
-    try{localStorage.setItem('block11_manualUnavail',JSON.stringify(manualUnavail));}catch{}
-    setSaveMsg("Saved ✓");setTimeout(()=>setSaveMsg(""),2500);
-  };
-  const[publishMsg,setPublishMsg]=useState("");
-  const handlePublish=async()=>{
+  // Bakes the given schedule + Daytime Coverage overrides into this file's own
+  // DEFAULT_initialSchedule / DEFAULT_manualUnavail constants and POSTs the
+  // result to /publish (server.py), which writes both app/index.html and
+  // deploy/index.html and git commits + pushes. Shared by Save and Publish so
+  // both buttons take the live site out of sync in exactly the same way.
+  const publishToServer=async(schedData,manualUnavailData)=>{
     try{
-      setPublishMsg("Publishing…");
       const resp=await fetch((location.pathname||'/')+'?v='+Date.now(),{cache:'no-store'});
       const html=await resp.text();
-      const lines=sched.map(row=>{
+      const lines=schedData.map(row=>{
         const so=JSON.stringify(row.SO),nicu=JSON.stringify(row.NICU),picu=JSON.stringify(row.PICU),pmw=JSON.stringify(row.PMW);
         const dcn=JSON.stringify(row.DC_NICU||[]),dcp=JSON.stringify(row.DC_PMW||[]);
         return `  { date:"${row.date}", greg:"${row.greg}", hijri:"${row.hijri}", day:"${row.day}", type:"${row.type}", SO:${so}, NICU:${nicu}, PICU:${picu}, PMW:${pmw}, DC_NICU:${dcn}, DC_PMW:${dcp} }`;
       });
-      const newBlock='const DEFAULT_initialSchedule = [\n'+lines.join(',\n')+'\n];';
-      const updated=html.replace(/const DEFAULT_initialSchedule = \[[\s\S]*?\];/,newBlock);
+      const newSchedBlock='const DEFAULT_initialSchedule = [\n'+lines.join(',\n')+'\n];';
+      let updated=html.replace(/const DEFAULT_initialSchedule = \[[\s\S]*?\];/,newSchedBlock);
+      const newUnavailBlock='const DEFAULT_manualUnavail = '+JSON.stringify(manualUnavailData)+';';
+      updated=updated.replace(/const DEFAULT_manualUnavail = \{[\s\S]*?\};/,newUnavailBlock);
       const result=await fetch('/publish',{method:'POST',headers:{'Content-Type':'text/html'},body:updated});
-      if(result.ok){setPublishMsg("Published! ✓");}else{setPublishMsg("Server error — is server.py running?");}
-      setTimeout(()=>setPublishMsg(""),5000);
-    }catch(e){setPublishMsg("Failed — start server.py first");setTimeout(()=>setPublishMsg(""),5000);}
+      return result.ok?{ok:true}:{ok:false,message:"Server error — is server.py running?"};
+    }catch(e){
+      return{ok:false,message:"Failed — start server.py first"};
+    }
+  };
+  const handleSave=async()=>{
+    try{localStorage.setItem('block11_sched',JSON.stringify(sched));}catch{}
+    try{localStorage.setItem('block11_manualUnavail',JSON.stringify(manualUnavail));}catch{}
+    setSaveMsg("Publishing…");
+    const result=await publishToServer(sched,manualUnavail);
+    setSaveMsg(result.ok?"Saved & published ✓":result.message);
+    setTimeout(()=>setSaveMsg(""),result.ok?2500:5000);
+  };
+  const[publishMsg,setPublishMsg]=useState("");
+  const handlePublish=async()=>{
+    setPublishMsg("Publishing…");
+    const result=await publishToServer(sched,manualUnavail);
+    setPublishMsg(result.ok?"Published! ✓":result.message);
+    setTimeout(()=>setPublishMsg(""),5000);
   };
   const[shareMsg,setShareMsg]=useState("");
   const[isMobile,setIsMobile]=useState(()=>window.innerWidth<768);
@@ -1984,7 +2006,7 @@ function App(){
             <div style={{display:"flex",gap:4,flexWrap:"wrap",justifyContent:"flex-end"}}>
               {!isProduction&&<button onClick={undo} disabled={!history.length} style={{padding:"2px 9px",borderRadius:4,fontSize:11,fontWeight:600,cursor:history.length?"pointer":"default",background:history.length?"#fffbeb":"#f9fafb",color:history.length?"#92400e":"#9ca3af",border:`1px solid ${history.length?"#fcd34d":"#e5e7eb"}`}}>↩ Undo{history.length?` (${history.length})`:""}</button>}
               {!isProduction&&<button onClick={reset} style={{padding:"2px 9px",borderRadius:4,fontSize:11,fontWeight:600,cursor:"pointer",background:"#fef2f2",color:"#991b1b",border:"1px solid #fca5a5"}}>↺ Reset</button>}
-              {!isProduction&&<button onClick={handleSave} style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:saveMsg?"#166534":"#065f46",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4,transition:"background 0.3s"}}><span>💾</span>{saveMsg||"Save"}</button>}
+              {!isProduction&&<button onClick={handleSave} title="Saves locally and publishes the schedule + Daytime Coverage overrides to the live site" style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:saveMsg?"#166534":"#065f46",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4,transition:"background 0.3s"}}><span>💾</span>{saveMsg||"Save"}</button>}
               {!isProduction&&<button onClick={handleCopyLink} style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:shareMsg?"#1d4ed8":"#3b82f6",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4,transition:"background 0.3s"}}><span>🔗</span>{shareMsg||"Share Link"}</button>}
               {!isProduction&&<button onClick={handlePublish} title="Bake schedule into deploy/index.html and git push to Netlify" style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:publishMsg==="Published! ✓"?"#166534":publishMsg?"#7c3aed":"#6d28d9",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4,transition:"background 0.3s"}}><span>📦</span>{publishMsg||"Publish"}</button>}
               {!isProduction&&<button onClick={recommendDayCalls} title="Auto-fill empty day call slots" style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"#b45309",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4}}><span>✦</span> Recommend Day Calls</button>}
