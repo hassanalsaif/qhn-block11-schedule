@@ -4,6 +4,21 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>QHN — Block 11 Duty Rota</title>
+  <script>
+    // Defensive: this app has never registered a service worker itself, but
+    // one left over from an earlier deploy/session (or a browser extension)
+    // can silently serve a stale cached page even through a hard refresh --
+    // only a private window (clean storage) bypasses it. Unregister any stray
+    // worker and clear its caches on every load so nobody stays stuck on it.
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(regs => {
+        regs.forEach(reg => reg.unregister());
+      }).catch(()=>{});
+    }
+    if (window.caches && caches.keys) {
+      caches.keys().then(names => names.forEach(name => caches.delete(name))).catch(()=>{});
+    }
+  </script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
