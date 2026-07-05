@@ -22,7 +22,7 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
-  <script src="/jszip.min.js"></script>
+  <script src="jszip.min.js"></script>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{background:#f8fafc;font-family:Inter,system-ui,sans-serif}
@@ -274,7 +274,7 @@ function checkWarnings(newSched,name,toDate,toSlot){
 
 async function exportDocx(sched){
   if(typeof JSZip==="undefined")throw new Error("JSZip library not loaded — check internet connection and refresh the page.");
-  const resp=await fetch("/block11_template.docx?v=" + Date.now());
+  const resp=await fetch("block11_template.docx?v=" + Date.now());
   if(!resp.ok)throw new Error(`Template not found (HTTP ${resp.status}). Make sure block11_template.docx is in the app/ folder.`);
   const buf=await resp.arrayBuffer();
   const zip=await JSZip.loadAsync(buf);
