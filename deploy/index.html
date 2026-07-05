@@ -30,8 +30,8 @@ const API_BASE = "http://localhost:5000";
 const DEFAULT_initialSchedule = [
   { date:"Jul 5", greg:"05/07", hijri:"20 Muh", day:"Sun", type:"WD", SO:["H.Saif"], NICU:["Dina"], PICU:["Z.Sairafi"], PMW:["A.Darora"], DC_NICU:["H.Amrad"], DC_PMW:["Reem","A.Qassab"] },
   { date:"Jul 6", greg:"06/07", hijri:"21 Muh", day:"Mon", type:"WD", SO:["F.Saffar"], NICU:["A.Ibrahim"], PICU:["Abdulla"], PMW:["Sajad"], DC_NICU:["Sajad"], DC_PMW:["Abdulla","A.Ibrahim"] },
-  { date:"Jul 7", greg:"07/07", hijri:"22 Muh", day:"Tue", type:"WD", SO:["H.Jalood"], NICU:["Mustafa"], PICU:["Yasir"], PMW:["Wasayif"], DC_NICU:["Yasir"], DC_PMW:["H.Albaiek","A.Rashid"] },
-  { date:"Jul 8", greg:"08/07", hijri:"23 Muh", day:"Wed", type:"WD", SO:["Reem","Malak"], NICU:["A.Basarah","A.Qassab"], PICU:["A.Dayin","S.Zaidani"], PMW:["Z.Madeh"], DC_NICU:["M.Hajji"], DC_PMW:["H.Saif","Z.Madeh"] },
+  { date:"Jul 7", greg:"07/07", hijri:"22 Muh", day:"Tue", type:"WD", SO:["Reem"], NICU:["Mustafa"], PICU:["Yasir"], PMW:["Wasayif"], DC_NICU:["Yasir"], DC_PMW:["H.Albaiek","A.Rashid"] },
+  { date:"Jul 8", greg:"08/07", hijri:"23 Muh", day:"Wed", type:"WD", SO:["H.Jalood"], NICU:["A.Basarah","A.Qassab"], PICU:["A.Dayin","S.Zaidani"], PMW:["Z.Madeh"], DC_NICU:["M.Hajji"], DC_PMW:["H.Saif","Z.Madeh"] },
   { date:"Jul 9", greg:"09/07", hijri:"24 Muh", day:"Thu", type:"WE", SO:["H.Albaiek"], NICU:["H.Amrad"], PICU:["A.Darora"], PMW:["Sajidah","F.Ghanim"], DC_NICU:["Sajidah"], DC_PMW:["Qasim","Z.Aman"] },
   { date:"Jul 10", greg:"10/07", hijri:"25 Muh", day:"Fri", type:"WE", SO:["A.Ibrahim"], NICU:["Z.Sairafi"], PICU:["Wasayif","Qasim"], PMW:["M.Hajji"], DC_NICU:[], DC_PMW:[] },
   { date:"Jul 11", greg:"11/07", hijri:"26 Muh", day:"Sat", type:"WE", SO:["Sara"], NICU:["Dina"], PICU:["A.Rashid"], PMW:["Z.Madeh"], DC_NICU:[], DC_PMW:[] },
@@ -46,11 +46,11 @@ const DEFAULT_initialSchedule = [
   { date:"Jul 20", greg:"20/07", hijri:"05 Saf", day:"Mon", type:"WD", SO:["Sara"], NICU:["Z.Sairafi","A.Rashid"], PICU:["A.Basarah","A.Dayin"], PMW:["S.Zaidani"], DC_NICU:["Yasir"], DC_PMW:["S.Zaidani","Arwa"] },
   { date:"Jul 21", greg:"21/07", hijri:"06 Saf", day:"Tue", type:"WD", SO:["H.Saif"], NICU:["M.Khadhrawi","Yasir"], PICU:["Shahad","Qasim"], PMW:["Sajidah"], DC_NICU:["Sajidah"], DC_PMW:["F.Ghanim","H.Jalood"] },
   { date:"Jul 22", greg:"22/07", hijri:"07 Saf", day:"Wed", type:"WD", SO:["F.Saffar","Arwa"], NICU:["Mustafa"], PICU:["M.Hajji","F.Ghanim"], PMW:["Z.Abdulmohsen","Anwar"], DC_NICU:["M.Hajji"], DC_PMW:["Anwar","A.Rashid"] },
-  { date:"Jul 23", greg:"23/07", hijri:"08 Saf", day:"Thu", type:"WE", SO:["Reem","Malak"], NICU:["Sajad"], PICU:["Z.Madan"], PMW:["A.Basarah"], DC_NICU:["Sajad"], DC_PMW:["Z.Madan","Sara"] },
+  { date:"Jul 23", greg:"23/07", hijri:"08 Saf", day:"Thu", type:"WE", SO:["Reem"], NICU:["Sajad"], PICU:["Z.Madan"], PMW:["A.Basarah"], DC_NICU:["Sajad"], DC_PMW:["Z.Madan","Sara"] },
   { date:"Jul 24", greg:"24/07", hijri:"09 Saf", day:"Fri", type:"WE", SO:["H.Albaiek"], NICU:["Sajidah","H.Amrad"], PICU:["A.Darora"], PMW:["S.Zaidani"], DC_NICU:[], DC_PMW:["O.Alsaihati"] },
   { date:"Jul 25", greg:"25/07", hijri:"10 Saf", day:"Sat", type:"WE", SO:["H.Jalood"], NICU:["A.Musalllam"], PICU:["A.Rashid"], PMW:["Anwar"], DC_NICU:[], DC_PMW:["F.Hamood"] },
   { date:"Jul 26", greg:"26/07", hijri:"11 Saf", day:"Sun", type:"WD", SO:["Sara","Arwa"], NICU:["Z.Sairafi"], PICU:["Shahad","A.Basarah"], PMW:["Z.Abdulmohsen","F.Ghanim"], DC_NICU:["A.Basarah"], DC_PMW:["S.Zaidani","Safia"] },
-  { date:"Jul 27", greg:"27/07", hijri:"12 Saf", day:"Mon", type:"WD", SO:["Reem","Malak"], NICU:["Sajad","Qasim"], PICU:["A.Dayin"], PMW:["M.Hajji","Z.Madan"], DC_NICU:["M.Hajji"], DC_PMW:["Anwar","Qasim"] },
+  { date:"Jul 27", greg:"27/07", hijri:"12 Saf", day:"Mon", type:"WD", SO:["Reem"], NICU:["Sajad","Qasim"], PICU:["A.Dayin"], PMW:["M.Hajji","Z.Madan"], DC_NICU:["M.Hajji"], DC_PMW:["Anwar","Qasim"] },
   { date:"Jul 28", greg:"28/07", hijri:"13 Saf", day:"Tue", type:"WD", SO:["H.Albaiek"], NICU:["H.Amrad"], PICU:["S.Zaidani"], PMW:["Sajidah"], DC_NICU:["Sajidah"], DC_PMW:["Z.Aman","H.Albaiek"] },
   { date:"Jul 29", greg:"29/07", hijri:"14 Saf", day:"Wed", type:"WD", SO:["H.Jalood","Safia"], NICU:["A.Musalllam","A.Rashid"], PICU:["Z.Aman","F.Ghanim"], PMW:["Anwar"], DC_NICU:["A.Basarah"], DC_PMW:["Z.Abdulmohsen","Reem"] },
   { date:"Jul 30", greg:"30/07", hijri:"15 Saf", day:"Thu", type:"WE", SO:["F.Saffar"], NICU:["Z.Sairafi"], PICU:["M.Hajji"], PMW:["Z.Abdulmohsen"], DC_NICU:["Z.Sairafi"], DC_PMW:["Z.Madan","Arwa"] },
@@ -175,6 +175,61 @@ function getAvailability(sched,dayIdx){
     : filterGroups["GP Team"];
   const nicu=unitBreakdown(nicuUnit),picu=unitBreakdown(picuUnit),gp=unitBreakdown(gpTeam);
   return{nicu,picu,gp,nicuTot:unitTotal(nicu),picuTot:unitTotal(picu),gpTot:unitTotal(gp)};
+}
+
+// ── Daytime team coverage (for the "Daytime Coverage" page) ───────────────────
+// Teams are derived live from rotationMap so they stay in sync with the data.
+// Per the chief: GP and PMW are the SAME team; ICU is split NICU/PICU. Every
+// resident who isn't NICU/PICU/GP/OPD falls into the Subspecialty "pull pool"
+// -- these are the residents you pull into a short team during the daytime.
+const COVERAGE_TEAMS=[
+  {key:"NICU", label:"NICU",      hdr:"#1d4ed8", light:"#dbeafe", match:n=>rotationMap[n]==="NICU"},
+  {key:"PICU", label:"PICU",      hdr:"#9d174d", light:"#fce7f3", match:n=>rotationMap[n]==="PICU"},
+  {key:"GP",   label:"GP / PMW",  hdr:"#065f46", light:"#d1fae5", match:n=>rotationMap[n]==="GP"},
+  {key:"OPD",  label:"OPD",       hdr:"#c2410c", light:"#ffedd5", match:n=>rotationMap[n]==="OPD"},
+  {key:"SUB",  label:"Subspecialty · pull pool", hdr:"#6d28d9", light:"#ede9fe",
+     match:n=>!["NICU","PICU","GP","OPD"].includes(rotationMap[n])},
+];
+const COVERAGE_LV=["R4","R3","R2","R1","EXT"];
+
+// For one day, split each team's members into available / post-call / vacation /
+// unavailable, grouped by level. "Available" = present for daytime coverage:
+// NOT post-call (on-call the night before -> off), NOT on vacation that week,
+// and NOT manually marked unavailable/post-call by the chief.
+// `overrides` is a { "date|name": "available"|"postcall"|"unavailable" } map
+// set from the Daytime Coverage page -- it always wins over the auto-computed
+// status (e.g. to force someone back to available despite a vacation week, or
+// to mark a same-day emergency post-call/sick-out that the base schedule
+// wouldn't otherwise know about). Each resident entry is {name, manual} so the
+// UI can flag which statuses are manual overrides vs. schedule-derived.
+function getTeamCoverage(sched,dayIdx,overrides){
+  const row=sched[dayIdx];
+  const week=getWeek(row.date);
+  const postCall=new Set();
+  if(dayIdx>0){
+    const prev=sched[dayIdx-1];
+    [...prev.SO,...prev.NICU,...prev.PICU,...prev.PMW].forEach(n=>postCall.add(n));
+  }
+  const ov=overrides||{};
+  const names=Object.keys(rotationMap);
+  return COVERAGE_TEAMS.map(team=>{
+    const byLevel={};
+    let avail=0,total=0;
+    names.filter(team.match).forEach(n=>{
+      const lv=levelMap[n]||"?";
+      if(!byLevel[lv])byLevel[lv]={available:[],postCall:[],vacation:[],unavailable:[]};
+      total++;
+      const auto=postCall.has(n)?"postcall":(vacationWeeks[n]||[]).includes(week)?"vacation":"available";
+      const override=ov[row.date+"|"+n]||null;
+      const status=override||auto;
+      const entry={name:n,manual:!!override};
+      if(status==="postcall")byLevel[lv].postCall.push(entry);
+      else if(status==="vacation")byLevel[lv].vacation.push(entry);
+      else if(status==="unavailable")byLevel[lv].unavailable.push(entry);
+      else{byLevel[lv].available.push(entry);avail++;}
+    });
+    return{...team,byLevel,avail,total};
+  });
 }
 
 function checkWarnings(newSched,name,toDate,toSlot){
@@ -1355,6 +1410,161 @@ function AvailabilityPanel({sched}){
   );
 }
 
+// ── Daytime Coverage Page ─────────────────────────────────────────────────────
+// A full-page, read-only pull-out view: for every day of the block it shows
+// each team's daytime coverage broken down by level (R4/R3/R2/R1/EXT), so the
+// chief can spot a short team (post-calls + vacations) and pull an available
+// resident -- especially from the Subspecialty pool -- to cover it.
+function CoveragePage({sched,manualUnavail,onSetStatus,onClearAllStatus}){
+  const[openKey,setOpenKey]=React.useState(null); // "date|name" of the pill whose popover is open
+  const lvDot={R4:"#1e3a8a",R3:"#166534",R2:"#92400e",R1:"#6b21a8",EXT:"#9a3412"};
+  const weeks=[
+    {label:"Week 1",dates:"Jul 5 – 11",   lo:0, hi:7},
+    {label:"Week 2",dates:"Jul 12 – 18",  lo:7, hi:14},
+    {label:"Week 3",dates:"Jul 19 – 25",  lo:14,hi:21},
+    {label:"Week 4",dates:"Jul 26 – Aug 1",lo:21,hi:28},
+  ];
+  const ratio=(a,t)=>{const p=t?a/t:1;return p>=0.75?{tx:"#166534",bg:"#dcfce7",bd:"#86efac"}:p>=0.5?{tx:"#b45309",bg:"#fef3c7",bd:"#fcd34d"}:{tx:"#991b1b",bg:"#fef2f2",bd:"#fca5a5"};};
+  const availPill={fontSize:10,fontWeight:600,color:"#065f46",background:"#d1fae5",border:"1px solid #6ee7b7",borderRadius:3,padding:"0 5px",lineHeight:"16px"};
+  const outPill  ={fontSize:9.5,fontWeight:500,color:"#94a3b8",background:"#f1f5f9",border:"1px solid #e2e8f0",borderRadius:3,padding:"0 5px",lineHeight:"16px",textDecoration:"line-through"};
+  const unavailPill={fontSize:9.5,fontWeight:600,color:"#991b1b",background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:3,padding:"0 5px",lineHeight:"16px",textDecoration:"line-through"};
+  const overrideCount=Object.keys(manualUnavail||{}).length;
+
+  const btnStyle=active=>({textAlign:"left",fontSize:10.5,fontWeight:600,padding:"4px 8px",borderRadius:4,
+    border:`1px solid ${active?"#1e3a5f":"transparent"}`,background:active?"#eff6ff":"#fff",color:"#1e293b",
+    cursor:"pointer",whiteSpace:"nowrap"});
+
+  // One clickable pill for a resident + its status popover (Available / Post-call / Unavailable / Clear)
+  function ResidentPill({entry,status,date}){
+    const key=`${date}|${entry.name}`;
+    const isOpen=openKey===key;
+    const rot=rotationMap[entry.name]||"";
+    const style=status==="available"?availPill:status==="unavailable"?unavailPill:outPill;
+    const suffix=status==="postcall"?" 📵":status==="vacation"?" 🏖":status==="unavailable"?" 🚫":"";
+    const tip=status==="postcall"?"Post-call (on-call last night)":status==="vacation"?"On vacation this week":status==="unavailable"?"Marked unavailable":"Available — click to change";
+    return(
+      <span style={{position:"relative",display:"inline-block"}}>
+        <span
+          onClick={e=>{e.stopPropagation();setOpenKey(isOpen?null:key);}}
+          title={tip+(entry.manual?" (manually set)":"")+" — click to change"}
+          style={{...style,cursor:"pointer",...(entry.manual?{boxShadow:"0 0 0 1px #94a3b8"}:{})}}>
+          {entry.name}{rot&&<span style={{opacity:0.6,fontWeight:500}}> · {rot}</span>}{suffix}{entry.manual&&<span style={{opacity:0.6}}> ✎</span>}
+        </span>
+        {isOpen&&(
+          <div onClick={e=>e.stopPropagation()} style={{position:"absolute",top:"100%",left:0,marginTop:3,zIndex:60,
+            background:"#fff",border:"1px solid #cbd5e1",borderRadius:6,boxShadow:"0 4px 16px rgba(0,0,0,0.2)",
+            padding:4,display:"flex",flexDirection:"column",gap:2,minWidth:150}}>
+            <div style={{fontSize:9.5,fontWeight:800,color:"#1e293b",padding:"2px 6px 4px",borderBottom:"1px solid #f1f5f9"}}>{entry.name}{rot&&<span style={{fontWeight:600,color:"#94a3b8"}}> · {rot}</span>}</div>
+            <button onClick={()=>{onSetStatus(date,entry.name,"available");setOpenKey(null);}} style={btnStyle(status==="available")}>✅ Available</button>
+            <button onClick={()=>{onSetStatus(date,entry.name,"postcall");setOpenKey(null);}} style={btnStyle(status==="postcall")}>📵 Post-call</button>
+            <button onClick={()=>{onSetStatus(date,entry.name,"unavailable");setOpenKey(null);}} style={btnStyle(status==="unavailable")}>🚫 Unavailable</button>
+            {entry.manual&&<button onClick={()=>{onSetStatus(date,entry.name,null);setOpenKey(null);}} style={{...btnStyle(false),color:"#64748b",borderTop:"1px solid #f1f5f9",marginTop:2,paddingTop:5}}>↺ Clear (use schedule)</button>}
+          </div>
+        )}
+      </span>
+    );
+  }
+
+  return(
+    <div onClick={()=>setOpenKey(null)}>
+      {/* Legend / how-to */}
+      <div style={{background:"#fff",borderRadius:8,border:"1px solid #e2e8f0",padding:"8px 12px",marginBottom:8,
+        fontSize:11,color:"#475569",display:"flex",flexWrap:"wrap",gap:"6px 14px",alignItems:"center"}}>
+        <span style={{fontWeight:800,color:"#1e3a5f",fontSize:12}}>🩺 Daytime Team Coverage</span>
+        <span>Who is <strong style={{color:"#166534"}}>present</strong> for daytime coverage each day, by team &amp; level. A team's chip turns
+          <strong style={{color:"#b45309"}}> amber</strong>/<strong style={{color:"#991b1b"}}>red</strong> as it gets short — pull from the
+          <strong style={{color:"#6d28d9"}}> Subspecialty pool</strong> (or a fuller team) to cover it.
+          <strong> Click any name</strong> to mark them available, post-call, or unavailable for that day.</span>
+        <span style={{display:"flex",gap:10,alignItems:"center",marginLeft:"auto",flexShrink:0}}>
+          <span style={availPill}>available</span>
+          <span style={outPill}>name</span>
+          <span style={{fontSize:10,color:"#64748b"}}>📵 post-call · 🏖 vacation · 🚫 unavailable · ✎ manual</span>
+          {overrideCount>0&&
+            <button onClick={e=>{e.stopPropagation();onClearAllStatus();}}
+              title="Clear all manual overrides"
+              style={{fontSize:10,fontWeight:700,color:"#991b1b",background:"#fef2f2",border:"1px solid #fca5a5",
+                borderRadius:4,padding:"2px 8px",cursor:"pointer"}}>
+              ↺ Clear {overrideCount} override{overrideCount>1?"s":""}
+            </button>}
+        </span>
+      </div>
+
+      {weeks.map(w=>(
+        <div key={w.label}>
+          <div style={{background:"#1e293b",color:"#e2e8f0",fontSize:11,fontWeight:800,letterSpacing:"0.06em",
+            textTransform:"uppercase",padding:"5px 12px",borderRadius:6,margin:"12px 0 6px"}}>
+            {w.label} <span style={{color:"#94a3b8",fontWeight:600,marginLeft:6}}>{w.dates}</span>
+          </div>
+          {sched.slice(w.lo,w.hi).map((row,ri)=>{
+            const dayIdx=w.lo+ri;
+            const teams=getTeamCoverage(sched,dayIdx,manualUnavail);
+            const isWE=row.type==="WE";
+            return(
+              <div key={row.date} style={{background:"#fff",borderRadius:8,marginBottom:8,
+                border:`1px solid ${isWE?"#bae6fd":"#e2e8f0"}`,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+                <div style={{background:isWE?"#0369a1":"#1e293b",color:"#fff",padding:"5px 12px",
+                  borderTopLeftRadius:7,borderTopRightRadius:7,
+                  display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontWeight:800,fontSize:13}}>{row.day}</span>
+                    <span style={{fontSize:12,opacity:0.9}}>{row.date}</span>
+                    {isWE&&<span style={{fontSize:9.5,background:"rgba(255,255,255,0.25)",borderRadius:3,padding:"1px 5px",fontWeight:700}}>WEEKEND</span>}
+                  </div>
+                  <span style={{fontSize:10.5,opacity:0.8}}>{row.greg} · {row.hijri}</span>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(215px,1fr))",gap:1,background:"#e5e7eb"}}>
+                  {teams.map(team=>{
+                    const rc=ratio(team.avail,team.total);
+                    const levels=COVERAGE_LV.filter(lv=>team.byLevel[lv]);
+                    return(
+                      <div key={team.key} style={{background:"#fff",padding:"6px 8px",minWidth:0}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:5,marginBottom:5}}>
+                          <span style={{fontSize:9.5,fontWeight:800,color:"#fff",background:team.hdr,borderRadius:3,
+                            padding:"1px 6px",letterSpacing:"0.03em",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                            {team.label}
+                          </span>
+                          <span title={`${team.avail} of ${team.total} present`} style={{fontSize:10,fontWeight:800,color:rc.tx,
+                            background:rc.bg,border:`1px solid ${rc.bd}`,borderRadius:3,padding:"0 5px",lineHeight:"16px",flexShrink:0}}>
+                            {team.avail}/{team.total}
+                          </span>
+                        </div>
+                        {levels.length===0
+                          ?<div style={{fontSize:10,color:"#cbd5e1",fontStyle:"italic",paddingLeft:2}}>no residents</div>
+                          :<div style={{display:"flex",flexDirection:"column",gap:4}}>
+                            {levels.map(lv=>{
+                              const g=team.byLevel[lv];
+                              const tot=g.available.length+g.postCall.length+g.vacation.length+g.unavailable.length;
+                              return(
+                                <div key={lv} style={{display:"flex",alignItems:"flex-start",gap:5}}>
+                                  <span style={{display:"flex",alignItems:"center",gap:3,flexShrink:0,paddingTop:1}}>
+                                    <span style={{width:6,height:6,borderRadius:"50%",background:lvDot[lv],display:"inline-block"}}/>
+                                    <span style={{fontSize:9.5,fontWeight:800,color:lvDot[lv],minWidth:20}}>{lv}</span>
+                                    <span style={{fontSize:9,fontWeight:700,color:g.available.length?"#166534":"#991b1b"}}>{g.available.length}/{tot}</span>
+                                  </span>
+                                  <span style={{display:"flex",flexWrap:"wrap",gap:5,minWidth:0}}>
+                                    {g.available.map(e=><ResidentPill key={e.name} entry={e} status="available" date={row.date}/>)}
+                                    {g.postCall.map(e=><ResidentPill key={e.name} entry={e} status="postcall" date={row.date}/>)}
+                                    {g.vacation.map(e=><ResidentPill key={e.name} entry={e} status="vacation" date={row.date}/>)}
+                                    {g.unavailable.map(e=><ResidentPill key={e.name} entry={e} status="unavailable" date={row.date}/>)}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        }
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Mobile Day Card ───────────────────────────────────────────────────────────
 function MobileDayCard({row, selected, addTarget, setAddTarget, setAddSearch,
   handleCellClick, handleBadgeClick, getBadgeStyle}){
@@ -1451,10 +1661,37 @@ function App(){
   const[addSearch,setAddSearch]=useState("");
   const[dataSource,setDataSource]=useState("loading"); // "loading" | "live" | "fallback"
 
+  // Manual availability overrides for the Daytime Coverage page: keyed by
+  // "date|name" -> "available"|"postcall"|"unavailable". Always wins over the
+  // schedule-derived status (e.g. force someone available despite a vacation
+  // week, or flag a same-day sick-out the base schedule wouldn't know about).
+  const[manualUnavail,setManualUnavail]=useState(()=>{
+    try{const s=localStorage.getItem('block11_manualUnavail');return s?JSON.parse(s):{};}catch{return{};}
+  });
+  useEffect(()=>{try{localStorage.setItem('block11_manualUnavail',JSON.stringify(manualUnavail));}catch{}},[manualUnavail]);
+  const handleSetStatus=(date,name,value)=>{
+    setManualUnavail(prev=>{
+      const key=`${date}|${name}`;
+      if(value===null){const next={...prev};delete next[key];return next;}
+      return{...prev,[key]:value};
+    });
+  };
+  const handleClearAllStatus=()=>setManualUnavail({});
+
   // ── Fetch resident data from the backend on load; fall back to the
   // DEFAULT_* snapshots above if it's unreachable (e.g. published standalone
   // to Netlify, where the backend isn't deployed). Read-only: this hydrates
-  // the app's initial data, it doesn't sync schedule edits back. ──
+  // the app's initial data, it doesn't sync schedule edits back.
+  //
+  // Deliberately NOT included: initialSchedule. The on-call grid has its own
+  // dedicated sync path (localStorage + the Publish button, which writes the
+  // live schedule into this very file's DEFAULT_initialSchedule). The backend
+  // DB's schedule snapshot is a manual, one-off re-seed with no path back from
+  // Publish -- letting it override the schedule here silently reintroduces
+  // stale data any time the backend is running with an old seed, independent
+  // of anything actually published. Metadata below (rotations/levels/
+  // vacations/etc.) has no such dedicated in-app sync path, so backend stays
+  // authoritative for that. ──
   useEffect(()=>{
     let cancelled=false;
     fetch(`${API_BASE}/api/block11/bootstrap`)
@@ -1466,16 +1703,10 @@ function App(){
         vacationWeeks=data.vacationWeeks;
         unwantedDays=data.unwantedDays;
         residentProfiles=data.residentProfiles;
-        initialSchedule=data.initialSchedule;
         MASTER_ROTA=data.masterRota;
         BLOCK_VACATIONS=data.blockVacations;
         BLOCK_DATES=data.blockDates;
         filterGroups=buildFilterGroups();
-        // Only replace the schedule state if there's no in-progress local
-        // edit already saved -- localStorage, when present, always wins.
-        if(!localStorage.getItem('block11_sched')){
-          setSched(deepClone(initialSchedule));
-        }
         setDataSource("live");
       })
       .catch(()=>{ if(!cancelled) setDataSource("fallback"); });
@@ -1651,7 +1882,11 @@ function App(){
   const reset=()=>{if(isProduction)return;if(!window.confirm("Reset the entire schedule to the original template? This cannot be undone."))return;setSched(deepClone(initialSchedule));setHistory([]);setWarnings([]);setSelected(null);setMoveLog([]);};
   const handleExport=async()=>{setExporting(true);setExportErr("");try{await exportDocx(sched);}catch(err){console.error(err);setExportErr(err.message||"Export failed.");}finally{setExporting(false);}};
   useEffect(()=>{try{localStorage.setItem('block11_sched',JSON.stringify(sched));}catch{}}, [sched]);
-  const handleSave=()=>{try{localStorage.setItem('block11_sched',JSON.stringify(sched));}catch{}setSaveMsg("Saved ✓");setTimeout(()=>setSaveMsg(""),2500);};
+  const handleSave=()=>{
+    try{localStorage.setItem('block11_sched',JSON.stringify(sched));}catch{}
+    try{localStorage.setItem('block11_manualUnavail',JSON.stringify(manualUnavail));}catch{}
+    setSaveMsg("Saved ✓");setTimeout(()=>setSaveMsg(""),2500);
+  };
   const[publishMsg,setPublishMsg]=useState("");
   const handlePublish=async()=>{
     try{
@@ -1704,7 +1939,7 @@ function App(){
 
         {/* ── Page tabs ── */}
         <div style={{display:"flex",gap:0,marginBottom:10,borderBottom:"2px solid #e2e8f0"}}>
-          {[["schedule","📅 Schedule"],["residents","👤 Residents"],["rota","📋 Master Rota"]].map(([p,label])=>(
+          {[["schedule","📅 Schedule"],["coverage","🩺 Daytime Coverage"],["residents","👤 Residents"],["rota","📋 Master Rota"]].map(([p,label])=>(
             <button key={p} onClick={()=>setPage(p)} style={{
               padding:"6px 18px",fontSize:12,fontWeight:700,cursor:"pointer",border:"none",
               background:"none",borderBottom:`3px solid ${page===p?"#1e3a5f":"transparent"}`,
@@ -1775,6 +2010,8 @@ function App(){
         <div style={{marginTop:6,padding:"5px 10px",background:"#f0f9ff",borderRadius:5,fontSize:11,color:"#0369a1",border:"1px solid #bae6fd"}}>
           {page==="residents"
             ?"👤 Individual resident schedules — vacation, unwanted days, constraints, and call details with gap analysis."
+            :page==="coverage"
+            ?"🩺 Daytime team coverage for every day — who's present vs post-call/on-vacation, by team & level. Use it to pull an available resident into a short team."
             :spotlight
               ?selected
                 ?<span>✦ <strong>{selected.name}</strong> selected from <em>{selected.fromDate} {slotLabel[selected.fromSlot]}</em> — click any cell to move, or pick a different call in the side panel.</span>
@@ -1816,6 +2053,13 @@ function App(){
       {page==="rota"&&(
         <div onClick={e=>e.stopPropagation()}>
           <MasterRotaPage sched={sched}/>
+        </div>
+      )}
+
+      {/* ── PAGE 4: Daytime Coverage ── */}
+      {page==="coverage"&&(
+        <div onClick={e=>e.stopPropagation()}>
+          <CoveragePage sched={sched} manualUnavail={manualUnavail} onSetStatus={handleSetStatus} onClearAllStatus={handleClearAllStatus}/>
         </div>
       )}
 
