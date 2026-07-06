@@ -1930,26 +1930,6 @@ function App(){
   const undo=()=>{if(!isAdmin||!history.length)return;writeSchedule(history[history.length-1]);setHistory(h=>h.slice(0,-1));setWarnings([]);setSelected(null);};
   const reset=()=>{if(!isAdmin)return;if(!window.confirm("Reset the entire schedule to the original template? This cannot be undone."))return;writeSchedule(deepClone(initialSchedule));setHistory([]);setWarnings([]);setSelected(null);setMoveLog([]);};
   const handleExport=async()=>{setExporting(true);setExportErr("");try{await exportDocx(sched);}catch(err){console.error(err);setExportErr(err.message||"Export failed.");}finally{setExporting(false);}};
-  // ── TEMPORARY, admin-only, one-time production seed ──────────────────────
-  // Firestore starts empty in a fresh project. Run this exactly once (logged
-  // in as admin, on the real production URL) to copy this file's embedded
-  // DEFAULT_initialSchedule/DEFAULT_manualUnavail into Firestore. Delete this
-  // function and its button in the very next commit after running it --
-  // it's a migration tool, not a feature.
-  const[importMsg,setImportMsg]=useState("");
-  const handleImportToFirestore=async()=>{
-    if(!isAdmin)return;
-    if(!window.confirm("This overwrites the LIVE Firestore schedule + Daytime Coverage data with this file's embedded snapshot. Run this only once, during initial setup. Continue?"))return;
-    setImportMsg("Importing…");
-    try{
-      await writeSchedule(deepClone(initialSchedule));
-      await writeManualUnavail({...DEFAULT_manualUnavail});
-      setImportMsg("Imported ✓");
-    }catch(e){
-      setImportMsg("Failed: "+(e.message||e));
-    }
-    setTimeout(()=>setImportMsg(""),5000);
-  };
   const[isMobile,setIsMobile]=useState(()=>window.innerWidth<768);
   const[mobilePanelOpen,setMobilePanelOpen]=useState(null); // "tracker"|"availability"|"history"|null
   useEffect(()=>{
@@ -2006,7 +1986,6 @@ function App(){
               {isAdmin&&<button onClick={undo} disabled={!history.length} style={{padding:"2px 9px",borderRadius:4,fontSize:11,fontWeight:600,cursor:history.length?"pointer":"default",background:history.length?"#fffbeb":"#f9fafb",color:history.length?"#92400e":"#9ca3af",border:`1px solid ${history.length?"#fcd34d":"#e5e7eb"}`}}>↩ Undo{history.length?` (${history.length})`:""}</button>}
               {isAdmin&&<button onClick={reset} style={{padding:"2px 9px",borderRadius:4,fontSize:11,fontWeight:600,cursor:"pointer",background:"#fef2f2",color:"#991b1b",border:"1px solid #fca5a5"}}>↺ Reset</button>}
               {isAdmin&&<button onClick={recommendDayCalls} title="Auto-fill empty day call slots" style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"#b45309",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4}}><span>✦</span> Recommend Day Calls</button>}
-              {isAdmin&&<button onClick={handleImportToFirestore} title="ONE-TIME migration tool: overwrites live Firestore data with this file's embedded snapshot. Delete after use." style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:importMsg==="Imported ✓"?"#166534":"#7c2d12",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4}}><span>⚠️</span>{importMsg||"Import to Firestore (one-time)"}</button>}
               <button onClick={handleExport} disabled={exporting} style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:exporting?"default":"pointer",background:exporting?"#94a3b8":"#1e3a5f",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4}}>
                 {exporting?<><span>⏳</span> Generating…</>:<><span>📄</span> Export DOCX</>}
               </button>
