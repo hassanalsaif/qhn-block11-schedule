@@ -1,0 +1,8 @@
+{
+  "name": "qhn-block11-admin-scripts",
+  "private": true,
+  "description": "One-off local admin scripts (not part of the deployed app). Run with a downloaded Firebase service-account key -- see set-admin-claim.js.",
+  "dependencies": {
+    "firebase-admin": "^12.0.0"
+  }
+}

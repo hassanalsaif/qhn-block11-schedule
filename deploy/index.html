@@ -23,6 +23,34 @@
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
   <script src="jszip.min.js"></script>
+  <!-- Firebase compat SDK (UMD/global style, matching how React/ReactDOM/Babel are
+       loaded above) -- avoids mixing ES modules with Babel Standalone's in-browser
+       JSX transform. Firestore is the live source of truth for the schedule and
+       Daytime Coverage overrides; Auth gates who can write. -->
+  <script src="https://www.gstatic.com/firebasejs/12.15.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/12.15.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore-compat.js"></script>
+  <script>
+    // Not a secret -- Firebase project config is always visible in any client
+    // bundle. Real security comes from firestore.rules + Authentication, not
+    // from hiding these values.
+    const firebaseConfig = {
+      apiKey: "AIzaSyBTPtXPaV_B-Bwk3uWEI84xiGqBN0LR5a8",
+      authDomain: "qhn-block11.firebaseapp.com",
+      projectId: "qhn-block11",
+      storageBucket: "qhn-block11.firebasestorage.app",
+      messagingSenderId: "451913392083",
+      appId: "1:451913392083:web:6f5179e2b1f696b3ee5926"
+    };
+    firebase.initializeApp(firebaseConfig);
+    // Local dev never touches real production data: the emulators are a
+    // different process/port entirely, not a config flag that could be left
+    // on by accident.
+    if (['localhost','127.0.0.1'].includes(location.hostname)) {
+      firebase.firestore().useEmulator('localhost', 8080);
+      firebase.auth().useEmulator('http://localhost:9099');
+    }
+  </script>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{background:#f8fafc;font-family:Inter,system-ui,sans-serif}
@@ -35,12 +63,6 @@
   <div id="root"></div>
   <script type="text/babel">
 const { useState, useEffect } = React;
-
-// Backend base URL for the resident database API (see backend/app.py). If
-// it's unreachable (e.g. this build published standalone to Netlify, where
-// the backend isn't deployed), the app falls back to the DEFAULT_* snapshots
-// below so it always renders -- see the bootstrap fetch in App().
-const API_BASE = "http://localhost:5000";
 
 const DEFAULT_initialSchedule = [
   { date:"Jul 5", greg:"05/07", hijri:"20 Muh", day:"Sun", type:"WD", SO:["H.Saif"], NICU:["Dina"], PICU:["Z.Sairafi"], PMW:["A.Darora"], DC_NICU:["H.Amrad"], DC_PMW:["Reem","A.Qassab"] },
@@ -1588,7 +1610,7 @@ function CoveragePage({sched,manualUnavail,onSetStatus,onClearAllStatus}){
 
 // ── Mobile Day Card ───────────────────────────────────────────────────────────
 function MobileDayCard({row, selected, addTarget, setAddTarget, setAddSearch,
-  handleCellClick, handleBadgeClick, getBadgeStyle}){
+  handleCellClick, handleBadgeClick, getBadgeStyle, isAdmin}){
   const isWE=row.type==="WE";
   const isMoveTarget=s=>selected&&!(selected.fromDate===row.date&&selected.fromSlot===s);
   return(
@@ -1618,7 +1640,7 @@ function MobileDayCard({row, selected, addTarget, setAddTarget, setAddSearch,
               cursor:selected?"pointer":"default",transition:"background 0.1s"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
               <span style={{fontSize:10,fontWeight:800,color:slotHdrBg[s],letterSpacing:"0.05em",textTransform:"uppercase"}}>{slotLabel[s]}</span>
-              {!isProduction&&<button onClick={e=>{e.stopPropagation();setAddTarget(isPickerOpen?null:{date:row.date,slot:s});setAddSearch("");}}
+              {isAdmin&&<button onClick={e=>{e.stopPropagation();setAddTarget(isPickerOpen?null:{date:row.date,slot:s});setAddSearch("");}}
                 style={{fontSize:13,fontWeight:700,padding:"3px 12px",borderRadius:4,
                   border:`1px solid ${isPickerOpen?"#1e3a5f":"#94a3b8"}`,
                   background:isPickerOpen?"#1e3a5f":"#f1f5f9",
@@ -1646,26 +1668,22 @@ function MobileDayCard({row, selected, addTarget, setAddTarget, setAddSearch,
   );
 }
 
-// ── Production flag — true when served from Netlify (not localhost) ───────────
-const isProduction = !['localhost','127.0.0.1'].includes(location.hostname);
-
 // ── App ───────────────────────────────────────────────────────────────────────
 function App(){
-  const[sched,setSched]     =useState(()=>{
-    function migrate(s){
-      // Replace removed residents with their successors
-      const sub={"Maab":"H.Albaiek"};
-      return s.map(row=>({...row,
-        SO:row.SO.map(n=>sub[n]||n), NICU:row.NICU.map(n=>sub[n]||n),
-        PICU:row.PICU.map(n=>sub[n]||n), PMW:row.PMW.map(n=>sub[n]||n),
-        DC_NICU:row.DC_NICU||[], DC_PMW:row.DC_PMW||[],
-      }));
-    }
-    try{
-      const hash=location.hash.slice(1);
-      if(hash){const s=JSON.parse(decodeURIComponent(escape(atob(hash))));history.replaceState(null,"",location.pathname);return migrate(s);}
-    }catch{}
-    try{const s=localStorage.getItem('block11_sched');return s?migrate(JSON.parse(s)):deepClone(initialSchedule);}catch{return deepClone(initialSchedule);}
+  // Schedule is now Firestore-backed: this listener is the ONLY thing that
+  // ever calls setSched. Every mutator below writes its computed "next"
+  // array straight to Firestore instead of calling setSched itself -- this
+  // is what makes every viewer's screen update live, with no publish step
+  // and no per-browser localStorage divergence possible.
+  const[sched,setSched]     =useState([]);
+  useEffect(()=>{
+    return firebase.firestore().collection('schedules').doc('block11')
+      .onSnapshot(snap=>{ if(snap.exists) setSched(snap.data().days); });
+  },[]);
+  const scheduleDocRef=firebase.firestore().collection('schedules').doc('block11');
+  const writeSchedule=(days)=>scheduleDocRef.set({
+    days, updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+    updatedBy:firebase.auth().currentUser?.uid||null,
   });
   const[history,setHistory] =useState([]);
   const[selected,setSelected]=useState(null);
@@ -1677,62 +1695,72 @@ function App(){
   const[exporting,setExporting]=useState(false);
   const[exportErr,setExportErr]=useState("");
   const[page,setPage]       =useState("schedule"); // "schedule" | "residents"
-  const[saveMsg,setSaveMsg] =useState("");
   const[addTarget,setAddTarget]=useState(null); // {date,slot} for the resident-picker dropdown
   const[addSearch,setAddSearch]=useState("");
-  const[dataSource,setDataSource]=useState("loading"); // "loading" | "live" | "fallback"
+
+  // ── Firebase Auth: isAdmin gates every edit affordance in the UI. Real
+  // enforcement lives in firestore.rules (admin custom claim required for
+  // writes) -- this client-side flag is only for showing/hiding edit UI. ──
+  const[isAdmin,setIsAdmin]=useState(false);
+  const[authChecked,setAuthChecked]=useState(false);
+  const[loginOpen,setLoginOpen]=useState(false);
+  const[loginEmail,setLoginEmail]=useState("");
+  const[loginPassword,setLoginPassword]=useState("");
+  const[loginErr,setLoginErr]=useState("");
+  const[loginBusy,setLoginBusy]=useState(false);
+  useEffect(()=>{
+    return firebase.auth().onAuthStateChanged(async user=>{
+      if(!user){setIsAdmin(false);setAuthChecked(true);return;}
+      try{
+        const token=await user.getIdTokenResult();
+        setIsAdmin(!!token.claims.admin);
+      }catch{setIsAdmin(false);}
+      setAuthChecked(true);
+    });
+  },[]);
+  const handleLogin=async(e)=>{
+    e.preventDefault();
+    setLoginErr("");setLoginBusy(true);
+    try{
+      await firebase.auth().signInWithEmailAndPassword(loginEmail,loginPassword);
+      setLoginOpen(false);setLoginEmail("");setLoginPassword("");
+    }catch(err){
+      setLoginErr(err.message||"Login failed");
+    }finally{
+      setLoginBusy(false);
+    }
+  };
+  const handleLogout=()=>{firebase.auth().signOut();};
 
   // Manual availability overrides for the Daytime Coverage page: keyed by
   // "date|name" -> "available"|"postcall"|"unavailable". Always wins over the
   // schedule-derived status (e.g. force someone available despite a vacation
   // week, or flag a same-day sick-out the base schedule wouldn't know about).
-  const[manualUnavail,setManualUnavail]=useState(()=>{
-    try{const s=localStorage.getItem('block11_manualUnavail');return s?JSON.parse(s):{...DEFAULT_manualUnavail};}catch{return{...DEFAULT_manualUnavail};}
-  });
-  useEffect(()=>{try{localStorage.setItem('block11_manualUnavail',JSON.stringify(manualUnavail));}catch{}},[manualUnavail]);
-  const handleSetStatus=(date,name,value)=>{
-    setManualUnavail(prev=>{
-      const key=`${date}|${name}`;
-      if(value===null){const next={...prev};delete next[key];return next;}
-      return{...prev,[key]:value};
-    });
-  };
-  const handleClearAllStatus=()=>setManualUnavail({});
-
-  // ── Fetch resident data from the backend on load; fall back to the
-  // DEFAULT_* snapshots above if it's unreachable (e.g. published standalone
-  // to Netlify, where the backend isn't deployed). Read-only: this hydrates
-  // the app's initial data, it doesn't sync schedule edits back.
-  //
-  // Deliberately NOT included: initialSchedule. The on-call grid has its own
-  // dedicated sync path (localStorage + the Publish button, which writes the
-  // live schedule into this very file's DEFAULT_initialSchedule). The backend
-  // DB's schedule snapshot is a manual, one-off re-seed with no path back from
-  // Publish -- letting it override the schedule here silently reintroduces
-  // stale data any time the backend is running with an old seed, independent
-  // of anything actually published. Metadata below (rotations/levels/
-  // vacations/etc.) has no such dedicated in-app sync path, so backend stays
-  // authoritative for that. ──
+  // Firestore-backed, same live-listener pattern as sched above.
+  const[manualUnavail,setManualUnavail]=useState({});
   useEffect(()=>{
-    let cancelled=false;
-    fetch(`${API_BASE}/api/block11/bootstrap`)
-      .then(r=>{ if(!r.ok) throw new Error(`status ${r.status}`); return r.json(); })
-      .then(data=>{
-        if(cancelled) return;
-        rotationMap=data.rotationMap;
-        levelMap=data.levelMap;
-        vacationWeeks=data.vacationWeeks;
-        unwantedDays=data.unwantedDays;
-        residentProfiles=data.residentProfiles;
-        MASTER_ROTA=data.masterRota;
-        BLOCK_VACATIONS=data.blockVacations;
-        BLOCK_DATES=data.blockDates;
-        filterGroups=buildFilterGroups();
-        setDataSource("live");
-      })
-      .catch(()=>{ if(!cancelled) setDataSource("fallback"); });
-    return ()=>{ cancelled=true; };
+    return firebase.firestore().collection('manualUnavail').doc('block11')
+      .onSnapshot(snap=>{ setManualUnavail(snap.exists?snap.data().overrides:{}); });
   },[]);
+  const manualUnavailDocRef=firebase.firestore().collection('manualUnavail').doc('block11');
+  const writeManualUnavail=(overrides)=>manualUnavailDocRef.set({
+    overrides, updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+    updatedBy:firebase.auth().currentUser?.uid||null,
+  });
+  const handleSetStatus=(date,name,value)=>{
+    if(!isAdmin)return;
+    const key=`${date}|${name}`;
+    const next={...manualUnavail};
+    if(value===null){delete next[key];}else{next[key]=value;}
+    writeManualUnavail(next);
+  };
+  const handleClearAllStatus=()=>{if(!isAdmin)return;writeManualUnavail({});};
+
+  // Resident metadata (rotations/levels/vacations/profiles/master rota) is
+  // just the embedded DEFAULT_* constants above -- no fetch, no backend.
+  // It changes at "new block / new resident roster" cadence, which fits a
+  // normal code-edit-and-deploy workflow fine. Only the schedule and Daytime
+  // Coverage overrides needed to be live, and those are Firestore-backed now.
 
   // ── Is a resident highlighted by the active filter or spotlight? ──
   const isHighlighted = name => {
@@ -1792,7 +1820,7 @@ function App(){
   };
 
   const handleCellClick=(toDate,toSlot)=>{
-    if(isProduction||!selected)return;
+    if(!isAdmin||!selected)return;
     const{name,fromDate,fromSlot}=selected;
     if(fromDate===toDate&&fromSlot===toSlot){setSelected(null);return;}
     setHistory(h=>[...h.slice(-29),deepClone(sched)]);
@@ -1802,33 +1830,33 @@ function App(){
     fromRow[fromSlot]=fromRow[fromSlot].filter(n=>n!==name);
     if(!toRow[toSlot].includes(name))toRow[toSlot]=[...toRow[toSlot],name];
     const warns=checkWarnings(next,name,toDate,toSlot);
-    setSched(next);setSelected(null);setWarnings(warns);
+    writeSchedule(next);setSelected(null);setWarnings(warns);
     const slbl=s=>slotLabel[s]||dcSlotLabel[s]||s;
     setMoveLog(log=>[{text:`${name}: ${fromDate} ${slbl(fromSlot)} → ${toDate} ${slbl(toSlot)}`,hasWarn:warns.length>0,time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})},...log.slice(0,9)]);
   };
 
   const handleDelete=(name,fromDate,fromSlot)=>{
-    if(isProduction)return;
+    if(!isAdmin)return;
     setHistory(h=>[...h.slice(-29),deepClone(sched)]);
     const next=deepClone(sched);
     next.find(r=>r.date===fromDate)[fromSlot]=next.find(r=>r.date===fromDate)[fromSlot].filter(n=>n!==name);
-    setSched(next);setSelected(null);setWarnings([]);
+    writeSchedule(next);setSelected(null);setWarnings([]);
     const slbl2=s=>slotLabel[s]||dcSlotLabel[s]||s;
     setMoveLog(log=>[{text:`${name}: removed from ${fromDate} ${slbl2(fromSlot)}`,hasWarn:false,time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})},...log.slice(0,9)]);
   };
   const handleBatchAddDC=(entries,resName)=>{
-    if(isProduction)return;
+    if(!isAdmin)return;
     setHistory(h=>[...h.slice(-29),deepClone(sched)]);
     const next=deepClone(sched);
     entries.forEach(({date,slot})=>{
       const row=next.find(r=>r.date===date);
       if(row&&!(row[slot]||[]).includes(resName))row[slot]=[...(row[slot]||[]),resName];
     });
-    setSched(next);
+    writeSchedule(next);
     setMoveLog(log=>[{text:`${resName}: added ${entries.length} day call(s)`,hasWarn:false,time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})},...log.slice(0,9)]);
   };
   const recommendDayCalls=()=>{
-    if(isProduction)return;
+    if(!isAdmin)return;
     const next=deepClone(sched);
     // Residents excluded from DC_PMW: R4, EXT, NICU team, PICU team
     const dcPmwExcluded=new Set([...nicuUnit,...picuUnit]);
@@ -1884,65 +1912,44 @@ function App(){
 
     if(changed>0){
       setHistory(h=>[...h.slice(-29),deepClone(sched)]);
-      setSched(next);
+      writeSchedule(next);
       setMoveLog(log=>[{text:`Recommended ${changed} day call slot(s)`,hasWarn:false,time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})},...log.slice(0,9)]);
     }
   };
 
   const handleAddToSlot=(name,date,slot)=>{
-    if(isProduction)return;
+    if(!isAdmin)return;
     setHistory(h=>[...h.slice(-29),deepClone(sched)]);
     const next=deepClone(sched);
     const row=next.find(r=>r.date===date);
     if(!row[slot].includes(name))row[slot]=[...row[slot],name];
     const warns=checkWarnings(next,name,date,slot);
-    setSched(next);setWarnings(warns);setAddTarget(null);setAddSearch("");
+    writeSchedule(next);setWarnings(warns);setAddTarget(null);setAddSearch("");
     setMoveLog(log=>[{text:`${name}: added to ${date} ${slotLabel[slot]}`,hasWarn:warns.length>0,time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})},...log.slice(0,9)]);
   };
-  const undo=()=>{if(isProduction||!history.length)return;setSched(history[history.length-1]);setHistory(h=>h.slice(0,-1));setWarnings([]);setSelected(null);};
-  const reset=()=>{if(isProduction)return;if(!window.confirm("Reset the entire schedule to the original template? This cannot be undone."))return;setSched(deepClone(initialSchedule));setHistory([]);setWarnings([]);setSelected(null);setMoveLog([]);};
+  const undo=()=>{if(!isAdmin||!history.length)return;writeSchedule(history[history.length-1]);setHistory(h=>h.slice(0,-1));setWarnings([]);setSelected(null);};
+  const reset=()=>{if(!isAdmin)return;if(!window.confirm("Reset the entire schedule to the original template? This cannot be undone."))return;writeSchedule(deepClone(initialSchedule));setHistory([]);setWarnings([]);setSelected(null);setMoveLog([]);};
   const handleExport=async()=>{setExporting(true);setExportErr("");try{await exportDocx(sched);}catch(err){console.error(err);setExportErr(err.message||"Export failed.");}finally{setExporting(false);}};
-  useEffect(()=>{try{localStorage.setItem('block11_sched',JSON.stringify(sched));}catch{}}, [sched]);
-  // Bakes the given schedule + Daytime Coverage overrides into this file's own
-  // DEFAULT_initialSchedule / DEFAULT_manualUnavail constants and POSTs the
-  // result to /publish (server.py), which writes both app/index.html and
-  // deploy/index.html and git commits + pushes. Shared by Save and Publish so
-  // both buttons take the live site out of sync in exactly the same way.
-  const publishToServer=async(schedData,manualUnavailData)=>{
+  // ── TEMPORARY, admin-only, one-time production seed ──────────────────────
+  // Firestore starts empty in a fresh project. Run this exactly once (logged
+  // in as admin, on the real production URL) to copy this file's embedded
+  // DEFAULT_initialSchedule/DEFAULT_manualUnavail into Firestore. Delete this
+  // function and its button in the very next commit after running it --
+  // it's a migration tool, not a feature.
+  const[importMsg,setImportMsg]=useState("");
+  const handleImportToFirestore=async()=>{
+    if(!isAdmin)return;
+    if(!window.confirm("This overwrites the LIVE Firestore schedule + Daytime Coverage data with this file's embedded snapshot. Run this only once, during initial setup. Continue?"))return;
+    setImportMsg("Importing…");
     try{
-      const resp=await fetch((location.pathname||'/')+'?v='+Date.now(),{cache:'no-store'});
-      const html=await resp.text();
-      const lines=schedData.map(row=>{
-        const so=JSON.stringify(row.SO),nicu=JSON.stringify(row.NICU),picu=JSON.stringify(row.PICU),pmw=JSON.stringify(row.PMW);
-        const dcn=JSON.stringify(row.DC_NICU||[]),dcp=JSON.stringify(row.DC_PMW||[]);
-        return `  { date:"${row.date}", greg:"${row.greg}", hijri:"${row.hijri}", day:"${row.day}", type:"${row.type}", SO:${so}, NICU:${nicu}, PICU:${picu}, PMW:${pmw}, DC_NICU:${dcn}, DC_PMW:${dcp} }`;
-      });
-      const newSchedBlock='const DEFAULT_initialSchedule = [\n'+lines.join(',\n')+'\n];';
-      let updated=html.replace(/const DEFAULT_initialSchedule = \[[\s\S]*?\];/,newSchedBlock);
-      const newUnavailBlock='const DEFAULT_manualUnavail = '+JSON.stringify(manualUnavailData)+';';
-      updated=updated.replace(/const DEFAULT_manualUnavail = \{[\s\S]*?\};/,newUnavailBlock);
-      const result=await fetch('/publish',{method:'POST',headers:{'Content-Type':'text/html'},body:updated});
-      return result.ok?{ok:true}:{ok:false,message:"Server error — is server.py running?"};
+      await writeSchedule(deepClone(initialSchedule));
+      await writeManualUnavail({...DEFAULT_manualUnavail});
+      setImportMsg("Imported ✓");
     }catch(e){
-      return{ok:false,message:"Failed — start server.py first"};
+      setImportMsg("Failed: "+(e.message||e));
     }
+    setTimeout(()=>setImportMsg(""),5000);
   };
-  const handleSave=async()=>{
-    try{localStorage.setItem('block11_sched',JSON.stringify(sched));}catch{}
-    try{localStorage.setItem('block11_manualUnavail',JSON.stringify(manualUnavail));}catch{}
-    setSaveMsg("Publishing…");
-    const result=await publishToServer(sched,manualUnavail);
-    setSaveMsg(result.ok?"Saved & published ✓":result.message);
-    setTimeout(()=>setSaveMsg(""),result.ok?2500:5000);
-  };
-  const[publishMsg,setPublishMsg]=useState("");
-  const handlePublish=async()=>{
-    setPublishMsg("Publishing…");
-    const result=await publishToServer(sched,manualUnavail);
-    setPublishMsg(result.ok?"Published! ✓":result.message);
-    setTimeout(()=>setPublishMsg(""),5000);
-  };
-  const[shareMsg,setShareMsg]=useState("");
   const[isMobile,setIsMobile]=useState(()=>window.innerWidth<768);
   const[mobilePanelOpen,setMobilePanelOpen]=useState(null); // "tracker"|"availability"|"history"|null
   useEffect(()=>{
@@ -1950,13 +1957,6 @@ function App(){
     window.addEventListener('resize',fn);
     return()=>window.removeEventListener('resize',fn);
   },[]);
-  const handleCopyLink=()=>{
-    try{
-      const encoded=btoa(unescape(encodeURIComponent(JSON.stringify(sched))));
-      const url=location.origin+location.pathname+"#"+encoded;
-      navigator.clipboard.writeText(url).then(()=>{setShareMsg("Link copied!");setTimeout(()=>setShareMsg(""),3000);});
-    }catch(e){setShareMsg("Copy failed");setTimeout(()=>setShareMsg(""),3000);}
-  };
 
   const weeks=[
     {label:"W1",dates:"Jul 5–11",rows:sched.slice(0,7)},
@@ -1990,11 +1990,6 @@ function App(){
             <div style={{fontSize:15,fontWeight:800,color:"#1e3a5f"}}>QHN — Duty Rota Block #11</div>
             <div style={{fontSize:11,color:"#475569",marginTop:1}}>05/07/2026 – 01/08/2026 · 20 Muharram – 17 Safar 1448</div>
             <div style={{fontSize:11,color:"#64748b"}}>Acting Chief Resident: <strong>Hassan AlSaif</strong></div>
-            <div style={{fontSize:9.5,color:"#94a3b8",marginTop:2}}>
-              {dataSource==="loading"&&"⏳ Loading resident data…"}
-              {dataSource==="live"&&"🟢 Live data (backend)"}
-              {dataSource==="fallback"&&"⚪ Offline snapshot (backend unreachable)"}
-            </div>
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:5,alignItems:"flex-end"}}>
             <div style={{display:"flex",gap:4,flexWrap:"wrap",justifyContent:"flex-end"}}>
@@ -2004,12 +1999,14 @@ function App(){
               ))}
             </div>
             <div style={{display:"flex",gap:4,flexWrap:"wrap",justifyContent:"flex-end"}}>
-              {!isProduction&&<button onClick={undo} disabled={!history.length} style={{padding:"2px 9px",borderRadius:4,fontSize:11,fontWeight:600,cursor:history.length?"pointer":"default",background:history.length?"#fffbeb":"#f9fafb",color:history.length?"#92400e":"#9ca3af",border:`1px solid ${history.length?"#fcd34d":"#e5e7eb"}`}}>↩ Undo{history.length?` (${history.length})`:""}</button>}
-              {!isProduction&&<button onClick={reset} style={{padding:"2px 9px",borderRadius:4,fontSize:11,fontWeight:600,cursor:"pointer",background:"#fef2f2",color:"#991b1b",border:"1px solid #fca5a5"}}>↺ Reset</button>}
-              {!isProduction&&<button onClick={handleSave} title="Saves locally and publishes the schedule + Daytime Coverage overrides to the live site" style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:saveMsg?"#166534":"#065f46",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4,transition:"background 0.3s"}}><span>💾</span>{saveMsg||"Save"}</button>}
-              {!isProduction&&<button onClick={handleCopyLink} style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:shareMsg?"#1d4ed8":"#3b82f6",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4,transition:"background 0.3s"}}><span>🔗</span>{shareMsg||"Share Link"}</button>}
-              {!isProduction&&<button onClick={handlePublish} title="Bake schedule into deploy/index.html and git push to Netlify" style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:publishMsg==="Published! ✓"?"#166534":publishMsg?"#7c3aed":"#6d28d9",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4,transition:"background 0.3s"}}><span>📦</span>{publishMsg||"Publish"}</button>}
-              {!isProduction&&<button onClick={recommendDayCalls} title="Auto-fill empty day call slots" style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"#b45309",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4}}><span>✦</span> Recommend Day Calls</button>}
+              {authChecked&&(isAdmin
+                ?<button onClick={handleLogout} title="Log out" style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"#0f766e",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4}}><span>🔓</span> Log out</button>
+                :<button onClick={()=>setLoginOpen(true)} title="Admin log in" style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"#334155",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4}}><span>🔒</span> Admin log in</button>
+              )}
+              {isAdmin&&<button onClick={undo} disabled={!history.length} style={{padding:"2px 9px",borderRadius:4,fontSize:11,fontWeight:600,cursor:history.length?"pointer":"default",background:history.length?"#fffbeb":"#f9fafb",color:history.length?"#92400e":"#9ca3af",border:`1px solid ${history.length?"#fcd34d":"#e5e7eb"}`}}>↩ Undo{history.length?` (${history.length})`:""}</button>}
+              {isAdmin&&<button onClick={reset} style={{padding:"2px 9px",borderRadius:4,fontSize:11,fontWeight:600,cursor:"pointer",background:"#fef2f2",color:"#991b1b",border:"1px solid #fca5a5"}}>↺ Reset</button>}
+              {isAdmin&&<button onClick={recommendDayCalls} title="Auto-fill empty day call slots" style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"#b45309",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4}}><span>✦</span> Recommend Day Calls</button>}
+              {isAdmin&&<button onClick={handleImportToFirestore} title="ONE-TIME migration tool: overwrites live Firestore data with this file's embedded snapshot. Delete after use." style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:importMsg==="Imported ✓"?"#166534":"#7c2d12",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4}}><span>⚠️</span>{importMsg||"Import to Firestore (one-time)"}</button>}
               <button onClick={handleExport} disabled={exporting} style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:exporting?"default":"pointer",background:exporting?"#94a3b8":"#1e3a5f",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4}}>
                 {exporting?<><span>⏳</span> Generating…</>:<><span>📄</span> Export DOCX</>}
               </button>
@@ -2111,7 +2108,7 @@ function App(){
               setAddTarget={setAddTarget} setAddSearch={setAddSearch}
               handleCellClick={handleCellClick}
               handleBadgeClick={handleBadgeClick}
-              getBadgeStyle={getBadgeStyle}/>
+              getBadgeStyle={getBadgeStyle} isAdmin={isAdmin}/>
           ))}
 
           {/* Mobile add-resident bottom sheet */}
@@ -2174,10 +2171,10 @@ function App(){
                 style={{position:"fixed",top:0,left:0,bottom:0,width:"min(92vw,400px)",
                   background:"#fff",boxShadow:"4px 0 24px rgba(0,0,0,0.2)",overflowY:"auto"}}>
                 <ResidentPanel name={spotlight} sched={sched} selected={selected}
-                  setSelected={isProduction?()=>{}:sel=>{setSelected(sel);setWarnings([]);}}
+                  setSelected={isAdmin?sel=>{setSelected(sel);setWarnings([]);}:()=>{}}
                   onClose={()=>{setSpotlight(null);setSelected(null);}}
-                  onDelete={isProduction?null:(fromDate,fromSlot)=>handleDelete(spotlight,fromDate,fromSlot)}
-                  onAddDC={isProduction?null:(entries)=>handleBatchAddDC(entries,spotlight)}/>
+                  onDelete={isAdmin?(fromDate,fromSlot)=>handleDelete(spotlight,fromDate,fromSlot):null}
+                  onAddDC={isAdmin?(entries)=>handleBatchAddDC(entries,spotlight):null}/>
               </div>
             </div>
           )}
@@ -2289,10 +2286,10 @@ function App(){
             name={spotlight}
             sched={sched}
             selected={selected}
-            setSelected={isProduction?()=>{}:sel=>{setSelected(sel);setWarnings([]);}}
+            setSelected={isAdmin?sel=>{setSelected(sel);setWarnings([]);}:()=>{}}
             onClose={()=>{setSpotlight(null);setSelected(null);}}
-            onDelete={isProduction?null:(fromDate,fromSlot)=>handleDelete(spotlight,fromDate,fromSlot)}
-            onAddDC={isProduction?null:(entries)=>handleBatchAddDC(entries,spotlight)}
+            onDelete={isAdmin?(fromDate,fromSlot)=>handleDelete(spotlight,fromDate,fromSlot):null}
+            onAddDC={isAdmin?(entries)=>handleBatchAddDC(entries,spotlight):null}
           />
         )}
 
@@ -2365,10 +2362,10 @@ function App(){
                                         <span key={name}
                                           style={{background:"#fed7aa",borderColor:"#f97316",color:"#9a3412",padding:"2px 4px 2px 6px",borderRadius:3,fontSize:11,border:"1px solid #f97316",fontWeight:600,display:"inline-flex",alignItems:"center",gap:2}}
                                           title={name+" — Day Call"}>
-                                          <span onClick={e=>handleBadgeClick(e,name,row.date,s)} style={{cursor:isProduction?"default":"pointer"}}>{name}
+                                          <span onClick={e=>handleBadgeClick(e,name,row.date,s)} style={{cursor:isAdmin?"pointer":"default"}}>{name}
                                             {levelMap[name]&&<span style={{fontSize:8.5,opacity:0.65,fontWeight:500}}>·{levelMap[name]}</span>}
                                           </span>
-                                          {!isProduction&&<span onClick={e=>{e.stopPropagation();handleDelete(name,row.date,s);}}
+                                          {isAdmin&&<span onClick={e=>{e.stopPropagation();handleDelete(name,row.date,s);}}
                                             title="Remove day call"
                                             style={{marginLeft:2,cursor:"pointer",color:"#b45309",fontWeight:700,fontSize:12,lineHeight:1,opacity:0.7,padding:"0 1px"}}
                                             onMouseEnter={e=>e.currentTarget.style.opacity=1}
@@ -2376,7 +2373,7 @@ function App(){
                                         </span>
                                       ))}
                                     </div>}
-                                  {!isProduction&&<button
+                                  {isAdmin&&<button
                                     onClick={e=>{e.stopPropagation();setAddTarget(isPickerOpen?null:{date:row.date,slot:s});setAddSearch("");}}
                                     title="Add day call resident"
                                     style={{position:"absolute",bottom:2,right:3,fontSize:11,lineHeight:1,fontWeight:700,
@@ -2438,7 +2435,7 @@ function App(){
                                     </span>
                                   ))}
                                 </div>}
-                              {!isProduction&&<button
+                              {isAdmin&&<button
                                 onClick={e=>{e.stopPropagation();setAddTarget(isPickerOpen?null:{date:row.date,slot:s});setAddSearch("");}}
                                 title="Add resident to this slot"
                                 style={{position:"absolute",bottom:2,right:3,fontSize:11,lineHeight:1,fontWeight:700,
@@ -2529,6 +2526,30 @@ function App(){
       <div style={{marginTop:6,fontSize:10,color:"#94a3b8",textAlign:"center"}}>
         ANY CHANGE IN DUTY IS NOT ALLOWED UNLESS APPROVED BY HEAD OF DEPARTMENT · Dr. Thuraya Alsaffar · Dr. Zaki Alnemer
       </div>
+
+      {/* ── Admin login modal ── */}
+      {loginOpen&&(
+        <div onClick={()=>{setLoginOpen(false);setLoginErr("");}}
+          style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <form onClick={e=>e.stopPropagation()} onSubmit={handleLogin}
+            style={{background:"#fff",borderRadius:10,padding:20,width:280,boxShadow:"0 8px 30px rgba(0,0,0,0.25)"}}>
+            <div style={{fontSize:14,fontWeight:800,color:"#1e3a5f",marginBottom:12}}>Admin log in</div>
+            <input autoFocus type="email" required placeholder="Email" value={loginEmail} onChange={e=>setLoginEmail(e.target.value)}
+              style={{width:"100%",padding:"8px 10px",fontSize:13,border:"1px solid #cbd5e1",borderRadius:5,marginBottom:8,boxSizing:"border-box"}}/>
+            <input type="password" required placeholder="Password" value={loginPassword} onChange={e=>setLoginPassword(e.target.value)}
+              style={{width:"100%",padding:"8px 10px",fontSize:13,border:"1px solid #cbd5e1",borderRadius:5,marginBottom:8,boxSizing:"border-box"}}/>
+            {loginErr&&<div style={{fontSize:11,color:"#dc2626",marginBottom:8}}>{loginErr}</div>}
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+              <button type="button" onClick={()=>{setLoginOpen(false);setLoginErr("");}}
+                style={{padding:"6px 12px",borderRadius:5,fontSize:12,fontWeight:600,cursor:"pointer",background:"#f1f5f9",color:"#475569",border:"1px solid #cbd5e1"}}>Cancel</button>
+              <button type="submit" disabled={loginBusy}
+                style={{padding:"6px 14px",borderRadius:5,fontSize:12,fontWeight:700,cursor:loginBusy?"default":"pointer",background:loginBusy?"#94a3b8":"#1e3a5f",color:"#fff",border:"1px solid transparent"}}>
+                {loginBusy?"Signing in…":"Log in"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

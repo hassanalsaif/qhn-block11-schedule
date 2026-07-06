@@ -13,11 +13,18 @@ The app is served by a Python static HTTP server (no build step needed):
 ```bash
 # From the CRT2 directory:
 python -m http.server 3412 --directory app
+# or: python server.py (same thing, plus no-cache headers)
 ```
 
 Then open **http://localhost:3412** in a browser. The Claude preview panel is configured to start this server automatically via `.claude/launch.json`.
 
 The app runs as a standalone HTML file (`app/index.html`) that uses **Babel Standalone** (CDN) to transpile JSX in the browser at runtime. There is no build/compile step.
+
+**To test admin login / schedule edits locally**, also run the Firebase Local Emulator Suite (needs a JRE installed — the Firestore emulator is Java-based):
+```bash
+npx firebase-tools emulators:start --project=qhn-block11
+```
+The app auto-detects `localhost`/`127.0.0.1` and points at the emulators (ports 8080 Firestore, 9099 Auth) instead of real Firebase — see the `firebaseConfig` block in `app/index.html`'s `<head>`. Local dev can never touch production data this way; it's a different process/port, not a config flag that could be left on by accident.
 
 ## File layout
 
@@ -30,6 +37,8 @@ The app runs as a standalone HTML file (`app/index.html`) that uses **Babel Stan
 | `app/src/App.jsx` + `app/src/main.jsx` | Vite entry points (installed but not currently used — Python server is active). |
 
 **When editing logic**: change `block11_schedule.jsx`, then mirror the same change into `app/index.html` (replacing `import { useState } from "react"` → `const { useState } = React;` and removing `export default`).
+
+**Known divergence**: `app/index.html` has drifted ahead of `block11_schedule.jsx` in *data* (not just logic) — it has its own hand-curated `MASTER_ROTA` (full 13-block rotation per resident), `BLOCK_VACATIONS`, `BLOCK_DATES`, a whole Master Rota browsing page, and `DC_NICU`/`DC_PMW` day-coverage call slots that the jsx doesn't have at all. Treat `app/index.html` as the more current data source until this is reconciled back into the jsx.
 
 ## Architecture
 
@@ -67,3 +76,32 @@ Everything lives in a single React component file (`block11_schedule.jsx`). Key 
 ## DOCX template structure
 
 `block 11.docx` has 9 grid columns and 30 table rows (2 header + 28 data). The document.xml is minified. Empty data cells end with `</w:pPr></w:p></w:tc>` — the export function injects a `<w:r>` run before `</w:p>` to fill in text.
+
+## Live data (Firestore) — the schedule and Daytime Coverage overrides
+
+These two are the only genuinely *live, multi-user* pieces of data, and they live in Firestore, not in the file or in localStorage:
+
+| Firestore doc | Holds | Written by |
+|---|---|---|
+| `schedules/block11` | `{days: [...28 day objects...], updatedAt, updatedBy}` — the on-call grid | `writeSchedule()` in `app/index.html`, called by every schedule mutator (`handleCellClick`, `handleDelete`, `handleBatchAddDC`, `recommendDayCalls`, `handleAddToSlot`, `undo`, `reset`) |
+| `manualUnavail/block11` | `{overrides: {"date\|name": status}, updatedAt, updatedBy}` — Daytime Coverage tab overrides | `writeManualUnavail()`, called by `handleSetStatus`/`handleClearAllStatus` |
+
+**Why**: this replaced a fragile static-file-publish mechanism (bake schedule into the HTML's own `DEFAULT_initialSchedule` constant, git commit + push) that caused repeated "my edit isn't showing up" bugs — every browser's `localStorage` could silently diverge from what was actually published, with no way to reconcile except manually clearing storage. Firestore's `onSnapshot` listeners mean every viewer's screen updates live, the instant an edit is saved — no publish step, no cache, nothing to diverge.
+
+**Security model**: anyone can read both docs (matches the app's historical fully-public behavior — no viewer login needed). Only a signed-in user carrying the `{admin: true}` custom claim can write — enforced server-side by `firestore.rules`, not just by the client's `isAdmin` UI flag (which only hides/shows edit buttons; the real check is in the rules).
+
+**Local dev never touches production Firestore.** `app/index.html`'s `firebaseConfig` script block auto-detects `localhost`/`127.0.0.1` and calls `useEmulator(...)` for both Firestore and Auth — a completely different local process (`npx firebase-tools emulators:start`, needs Java), not a flag that could be left pointed at prod by accident.
+
+**Granting admin access**: `scripts/set-admin-claim.js` (needs `scripts/serviceAccountKey.json`, a service account key downloaded from Firebase Console → Project Settings → Service Accounts — gitignored, never commit it):
+```bash
+cd scripts && npm install
+node set-admin-claim.js someone@example.com true                # grant (account must already exist)
+node set-admin-claim.js someone@example.com true somepassword    # create the account AND grant (first admin)
+node set-admin-claim.js someone@example.com false                # revoke
+```
+
+**Resident metadata** (`rotationMap`, `levelMap`, `vacationWeeks`, `unwantedDays`, `residentProfiles`, `MASTER_ROTA`, `BLOCK_VACATIONS`, `BLOCK_DATES`) is **not** in Firestore — it's just the embedded `DEFAULT_*` constants in `app/index.html`, edited by hand and shipped via normal git commits. It changes at "new block / new resident roster" cadence, which fits a code-edit workflow fine; there was never a live-sync complaint about it, unlike the schedule.
+
+## Retired: the old Flask/SQLite backend
+
+`backend/` (Flask + SQLite, gitignored, never actually deployed anywhere) used to read-only-hydrate the metadata above via a `GET /api/block11/bootstrap` fetch on mount. That fetch has been removed from `app/index.html` entirely — the backend is no longer called by anything. Per the chief's own call, the files are left on disk (not deleted) in case they're useful for reference later, but they're dead code as far as the running app is concerned. `server.py`'s old `/publish` endpoint (which the static-file-publish mechanism above posted to) has likewise been removed — it's now pure static file serving with no-cache headers.

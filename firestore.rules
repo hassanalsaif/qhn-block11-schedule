@@ -1,0 +1,16 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Schedule and Daytime Coverage overrides: anyone can read (matches the
+    // app's current fully-public behavior), only signed-in admins can write.
+    // Real enforcement lives here, not in the client's isAdmin UI flag.
+    match /schedules/{doc} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.token.admin == true;
+    }
+    match /manualUnavail/{doc} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.token.admin == true;
+    }
+  }
+}

@@ -11,6 +11,9 @@ node_modules/
 # Data files (stay local only)
 *.csv
 *.xlsx
+*.db
+*.sqlite
+*.sqlite3
 
 # PDFs and Word source docs
 *.pdf
@@ -18,6 +21,10 @@ block 11.docx
 
 # Python scripts (dev tools)
 *.py
+__pycache__/
+
+# Resident database backend (stays local only, like server.py)
+backend/
 
 # Unpacked template dirs
 block11_unpacked/
@@ -41,3 +48,14 @@ app/vite.config.js
 
 # Claude session data
 .claude/projects/
+
+# Firebase service account keys (stay local only -- used by scripts/set-admin-claim.js)
+# Defense in depth: ignored regardless of location, not just the expected
+# scripts/ path, since these are private keys.
+**/serviceAccountKey.json
+*-firebase-adminsdk-*.json
+
+# Firebase emulator debug logs
+firestore-debug.log
+firebase-debug.log
+ui-debug.log
