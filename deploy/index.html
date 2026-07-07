@@ -1858,45 +1858,57 @@ function CoveragePage({sched,manualUnavail,onSetStatus,onClearAllStatus}){
 // date -- most specialties' PDFs stop at Jul 31, so Aug 1 is "no data" for
 // them, not "no service"). Admin-only inline edit, enforced for real by
 // firestore.rules, not just this client-side isAdmin check.
+// "Jul 7" style label matching sched's date strings, computed from the real
+// clock so this never goes stale (not hardcoded to Block 11's specific dates).
+function todayDateLabel(){
+  const months=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const d=new Date();
+  return `${months[d.getMonth()]} ${d.getDate()}`;
+}
+
 function ConsultantSchedulesPage({sched,consultantValues,onSetCell,isAdmin}){
-  const[editingKey,setEditingKey]=React.useState(null); // "specKey|date|colKey" of open inline editor
-  const weeks=[
-    {label:"Week 1",dates:"Jul 5 – 11",   lo:0, hi:7},
-    {label:"Week 2",dates:"Jul 12 – 18",  lo:7, hi:14},
-    {label:"Week 3",dates:"Jul 19 – 25",  lo:14,hi:21},
-    {label:"Week 4",dates:"Jul 26 – Aug 1",lo:21,hi:28},
-  ];
+  const todayLabel=todayDateLabel();
+  const todayIdx=sched.findIndex(r=>r.date===todayLabel);
+  // Single-day view, defaulting to today -- no scrolling needed at all (the
+  // previous design was a 28-card vertical feed; this shows exactly one day,
+  // navigated with Prev/Next or the date dropdown, which is what "smooth,
+  // mobile-friendly, quick access" actually calls for).
+  const[dayIdx,setDayIdx]=React.useState(todayIdx>=0?todayIdx:0);
+  const[editingKey,setEditingKey]=React.useState(null); // "specKey|colKey" -- no date needed, only one day is ever shown
+  const row=sched[dayIdx];
+  const isWE=row.type==="WE";
+  const isToday=row.date===todayLabel;
 
-  const assignedStyle={fontSize:10.5,fontWeight:600,color:"#1e293b",background:"#f8fafc",border:"1px solid #cbd5e1",borderRadius:3,padding:"2px 6px",display:"block"};
-  const noneStyle={fontSize:10,fontWeight:500,color:"#991b1b",background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:3,padding:"2px 6px",display:"block"};
-  const noDataStyle={fontSize:10,fontStyle:"italic",color:"#94a3b8",background:"#fff",border:"1px dashed #cbd5e1",borderRadius:3,padding:"2px 6px",display:"block"};
+  const assignedStyle={fontSize:12,fontWeight:600,color:"#1e293b",background:"#f8fafc",border:"1px solid #cbd5e1",borderRadius:4,padding:"6px 8px",display:"block"};
+  const noneStyle={fontSize:11.5,fontWeight:500,color:"#991b1b",background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:4,padding:"6px 8px",display:"block"};
+  const noDataStyle={fontSize:11.5,fontStyle:"italic",color:"#94a3b8",background:"#fff",border:"1px dashed #cbd5e1",borderRadius:4,padding:"6px 8px",display:"block"};
 
-  const commit=(specKey,date,colKey,text)=>{
+  const commit=(specKey,colKey,text)=>{
     const trimmed=(text||"").trim();
-    if(trimmed)onSetCell(specKey,date,colKey,{status:"assigned",text:trimmed});
+    if(trimmed)onSetCell(specKey,row.date,colKey,{status:"assigned",text:trimmed});
     setEditingKey(null);
   };
 
-  function Cell({specKey,date,colKey}){
-    const cellKey=`${specKey}|${date}|${colKey}`;
-    const val=consultantValues[cellKey]; // undefined = no data; else {status:"none"|"assigned",text}
+  function Cell({specKey,colKey}){
+    const cellKey=`${specKey}|${colKey}`;
+    const val=consultantValues[`${specKey}|${row.date}|${colKey}`]; // undefined = no data; else {status:"none"|"assigned",text}
     const isEditing=editingKey===cellKey;
 
     if(isEditing){
       return(
-        <div onClick={e=>e.stopPropagation()} style={{padding:"3px 4px",background:"#fff",border:"1px solid #1e3a5f",borderRadius:4}}>
+        <div onClick={e=>e.stopPropagation()} style={{padding:"4px 5px",background:"#fff",border:"1px solid #1e3a5f",borderRadius:5}}>
           <input autoFocus defaultValue={val?.text||""}
             onKeyDown={e=>{
-              if(e.key==="Enter")commit(specKey,date,colKey,e.currentTarget.value);
+              if(e.key==="Enter")commit(specKey,colKey,e.currentTarget.value);
               if(e.key==="Escape")setEditingKey(null);
             }}
-            onBlur={e=>{ if(e.currentTarget.value.trim())commit(specKey,date,colKey,e.currentTarget.value); else setEditingKey(null); }}
-            style={{width:"100%",fontSize:10.5,padding:"2px 4px",border:"1px solid #cbd5e1",borderRadius:3,marginBottom:3,boxSizing:"border-box"}}/>
-          <div style={{display:"flex",gap:3}}>
-            <button onMouseDown={e=>e.preventDefault()} onClick={()=>{onSetCell(specKey,date,colKey,{status:"none",text:""});setEditingKey(null);}}
-              style={{fontSize:9,padding:"1px 5px",borderRadius:3,border:"1px solid #fca5a5",background:"#fef2f2",color:"#991b1b",cursor:"pointer"}}>No service</button>
-            {val&&<button onMouseDown={e=>e.preventDefault()} onClick={()=>{onSetCell(specKey,date,colKey,null);setEditingKey(null);}}
-              style={{fontSize:9,padding:"1px 5px",borderRadius:3,border:"1px solid #cbd5e1",background:"#f8fafc",color:"#64748b",cursor:"pointer"}}>Clear</button>}
+            onBlur={e=>{ if(e.currentTarget.value.trim())commit(specKey,colKey,e.currentTarget.value); else setEditingKey(null); }}
+            style={{width:"100%",fontSize:12.5,padding:"6px 7px",border:"1px solid #cbd5e1",borderRadius:4,marginBottom:4,boxSizing:"border-box"}}/>
+          <div style={{display:"flex",gap:4}}>
+            <button onMouseDown={e=>e.preventDefault()} onClick={()=>{onSetCell(specKey,row.date,colKey,{status:"none",text:""});setEditingKey(null);}}
+              style={{fontSize:11,padding:"4px 8px",borderRadius:4,border:"1px solid #fca5a5",background:"#fef2f2",color:"#991b1b",cursor:"pointer"}}>No service</button>
+            {val&&<button onMouseDown={e=>e.preventDefault()} onClick={()=>{onSetCell(specKey,row.date,colKey,null);setEditingKey(null);}}
+              style={{fontSize:11,padding:"4px 8px",borderRadius:4,border:"1px solid #cbd5e1",background:"#f8fafc",color:"#64748b",cursor:"pointer"}}>Clear</button>}
           </div>
         </div>
       );
@@ -1908,13 +1920,15 @@ function ConsultantSchedulesPage({sched,consultantValues,onSetCell,isAdmin}){
     return <span onClick={onClick} style={{...assignedStyle,cursor:isAdmin?"pointer":"default"}}>{val.text}</span>;
   }
 
+  const go=delta=>{ setDayIdx(i=>Math.max(0,Math.min(sched.length-1,i+delta))); setEditingKey(null); };
+
   return(
     <div onClick={()=>setEditingKey(null)}>
       {/* Legend / how-to */}
       <div style={{background:"#fff",borderRadius:8,border:"1px solid #e2e8f0",padding:"8px 12px",marginBottom:8,
         fontSize:11,color:"#475569",display:"flex",flexWrap:"wrap",gap:"6px 14px",alignItems:"center"}}>
         <span style={{fontWeight:800,color:"#1e3a5f",fontSize:12}}>🧑‍⚕️ Subspecialty Consultant Schedules</span>
-        <span>Who's covering each subspecialty, synchronized in one place — no more checking separate PDFs.{isAdmin&&<strong> Click any cell</strong>}{isAdmin&&" to edit."}</span>
+        <span>Who's covering each subspecialty on the selected day — no more checking separate PDFs.{isAdmin&&<strong> Tap any row</strong>}{isAdmin&&" to edit."}</span>
         <span style={{display:"flex",gap:10,alignItems:"center",marginLeft:"auto",flexShrink:0}}>
           <span style={assignedStyle}>Dr. Name</span>
           <span style={noneStyle}>No service</span>
@@ -1922,58 +1936,57 @@ function ConsultantSchedulesPage({sched,consultantValues,onSetCell,isAdmin}){
         </span>
       </div>
 
-      {/* Block-wide notes (e.g. Hematology's general on-call + vacations) that don't fit a per-day cell */}
+      {/* Block-wide notes (e.g. Hematology's general on-call + vacations) -- not day-specific */}
       {CONSULTANT_SPECIALTIES.filter(s=>s.notes.length>0).map(s=>(
         <div key={s.key} style={{background:"#fff",border:`1px solid ${s.hdr}55`,borderLeft:`3px solid ${s.hdr}`,borderRadius:6,padding:"6px 10px",marginBottom:8,fontSize:10.5,color:"#475569"}}>
           <strong style={{color:s.hdr}}>{s.label} notes:</strong> {s.notes.join(" · ")}
         </div>
       ))}
 
-      {weeks.map(w=>(
-        <div key={w.label}>
-          <div style={{background:"#1e293b",color:"#e2e8f0",fontSize:11,fontWeight:800,letterSpacing:"0.06em",
-            textTransform:"uppercase",padding:"5px 12px",borderRadius:6,margin:"12px 0 6px"}}>
-            {w.label} <span style={{color:"#94a3b8",fontWeight:600,marginLeft:6}}>{w.dates}</span>
+      {/* Day navigator: Prev / current day + jump-to-date / Next -- one day at a time, zero scrolling */}
+      <div onClick={e=>e.stopPropagation()} style={{background:isToday?"#b45309":isWE?"#0369a1":"#1e293b",borderRadius:10,
+        padding:"10px 12px",marginBottom:12,display:"flex",alignItems:"center",gap:8,color:"#fff"}}>
+        <button onClick={()=>go(-1)} disabled={dayIdx===0} title="Previous day"
+          style={{minWidth:44,minHeight:44,fontSize:20,fontWeight:800,borderRadius:8,border:"none",
+            background:"rgba(255,255,255,0.15)",color:"#fff",cursor:dayIdx===0?"default":"pointer",opacity:dayIdx===0?0.4:1}}>
+          ‹
+        </button>
+        <div style={{flex:1,textAlign:"center",minWidth:0}}>
+          <div style={{fontSize:16,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",gap:6,flexWrap:"wrap"}}>
+            {row.day}, {row.date}
+            {isToday&&<span style={{fontSize:10,background:"rgba(255,255,255,0.3)",borderRadius:3,padding:"1px 6px",fontWeight:800}}>TODAY</span>}
+            {isWE&&!isToday&&<span style={{fontSize:10,background:"rgba(255,255,255,0.25)",borderRadius:3,padding:"1px 6px",fontWeight:700}}>WEEKEND</span>}
           </div>
-          {sched.slice(w.lo,w.hi).map(row=>{
-            const isWE=row.type==="WE";
-            return(
-              <div key={row.date} style={{background:"#fff",borderRadius:8,marginBottom:8,
-                border:`1px solid ${isWE?"#bae6fd":"#e2e8f0"}`,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
-                <div style={{background:isWE?"#0369a1":"#1e293b",color:"#fff",padding:"5px 12px",
-                  borderTopLeftRadius:7,borderTopRightRadius:7,
-                  display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <span style={{fontWeight:800,fontSize:13}}>{row.day}</span>
-                    <span style={{fontSize:12,opacity:0.9}}>{row.date}</span>
-                    {isWE&&<span style={{fontSize:9.5,background:"rgba(255,255,255,0.25)",borderRadius:3,padding:"1px 5px",fontWeight:700}}>WEEKEND</span>}
-                  </div>
-                  <span style={{fontSize:10.5,opacity:0.8}}>{row.greg} · {row.hijri}</span>
-                </div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:1,background:"#e5e7eb"}}>
-                  {CONSULTANT_SPECIALTIES.map(spec=>(
-                    <div key={spec.key} style={{background:"#fff",padding:"6px 8px",minWidth:0}}>
-                      <span style={{fontSize:9.5,fontWeight:800,color:"#fff",background:spec.hdr,borderRadius:3,
-                        padding:"1px 6px",letterSpacing:"0.03em",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",
-                        display:"inline-block",marginBottom:5}}>
-                        {spec.label}
-                      </span>
-                      <div style={{display:"flex",flexDirection:"column",gap:3}}>
-                        {spec.columns.map(col=>(
-                          <div key={col.key}>
-                            <div style={{fontSize:8.5,color:"#94a3b8",fontWeight:600,marginBottom:1}}>{col.label}</div>
-                            <Cell specKey={spec.key} date={row.date} colKey={col.key}/>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
+          <div style={{fontSize:11,opacity:0.8,marginTop:2}}>{row.greg} · {row.hijri}</div>
+          <select value={row.date} onChange={e=>{const idx=sched.findIndex(r=>r.date===e.target.value); if(idx>=0){setDayIdx(idx);setEditingKey(null);}}}
+            style={{marginTop:6,fontSize:12.5,padding:"6px 8px",borderRadius:6,border:"none",cursor:"pointer",minHeight:36,maxWidth:"100%"}}>
+            {sched.map(r=><option key={r.date} value={r.date}>{r.day}, {r.date}</option>)}
+          </select>
         </div>
-      ))}
+        <button onClick={()=>go(1)} disabled={dayIdx===sched.length-1} title="Next day"
+          style={{minWidth:44,minHeight:44,fontSize:20,fontWeight:800,borderRadius:8,border:"none",
+            background:"rgba(255,255,255,0.15)",color:"#fff",cursor:dayIdx===sched.length-1?"default":"pointer",opacity:dayIdx===sched.length-1?0.4:1}}>
+          ›
+        </button>
+      </div>
+
+      {/* One compact block per specialty for this single day -- no nested grids */}
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {CONSULTANT_SPECIALTIES.map(spec=>(
+          <div key={spec.key} style={{background:"#fff",borderRadius:8,border:"1px solid #e2e8f0",
+            borderLeft:`4px solid ${spec.hdr}`,padding:"8px 10px",boxShadow:"0 1px 3px rgba(0,0,0,0.05)"}}>
+            <div style={{fontSize:12.5,fontWeight:800,color:spec.hdr,marginBottom:6}}>{spec.label}</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+              {spec.columns.map(col=>(
+                <div key={col.key} style={{flex:"1 1 160px",minWidth:140}}>
+                  <div style={{fontSize:9.5,color:"#94a3b8",fontWeight:600,marginBottom:2,textTransform:"uppercase",letterSpacing:"0.03em"}}>{col.label}</div>
+                  <Cell specKey={spec.key} colKey={col.key}/>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
