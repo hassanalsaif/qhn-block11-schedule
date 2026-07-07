@@ -235,6 +235,247 @@ const COVERAGE_TEAMS=[
 ];
 const COVERAGE_LV=["R4","R3","R2","R1","EXT"];
 
+// ── Subspecialty Consultant Schedules ──────────────────────────────────────
+// Schema only (which columns each specialty has) -- this is config, edited at
+// "new PDF format" cadence, so it's a plain constant like COVERAGE_TEAMS, not
+// Firestore data. The actual day-by-day cell values are Firestore-backed (see
+// consultantValues/writeConsultantSchedules in App()) since the chief wants
+// to correct a cell directly in the app, not just view a static import.
+// Cardiology is excluded: its source PDF is dated June 2026, not July, so it
+// has zero data for this block. Orthopedics is excluded per instruction.
+const CONSULTANT_SPECIALTIES=[
+  {key:"pulm",  label:"Pulmonology",         hdr:"#0e7490",
+    columns:[{key:"onService",label:"On-Service"},{key:"nightOncall",label:"Night On-Call"}], notes:[]},
+  {key:"neuro", label:"Neurology",           hdr:"#7c2d12",
+    columns:[{key:"specDay",label:"Specialist (Day)"},{key:"specNight",label:"Specialist (Night)"},
+             {key:"consDay",label:"Consultant (Day)"},{key:"consNight",label:"Consultant (Night)"}], notes:[]},
+  {key:"heme",  label:"Hematology",          hdr:"#9d174d",
+    columns:[{key:"consultation",label:"Inpatient Consultation"},{key:"daycare",label:"PMFH Daycare"},
+             {key:"am",label:"PMFH AM"},{key:"newborn",label:"Newborn Screening"}],
+    notes:["General on-call (QCH, whole block): Dr. M.Darwish",
+           "Vacations: Dr.M.Darwish 2–6 Aug · Dr.ESRA 5–9 Jul & 19–23 Jul · Dr.Hana 12–16 Jul & 2–20 Aug · Dr.Zahra till 10 Aug"]},
+  {key:"neph",  label:"Nephrology",          hdr:"#166534",
+    columns:[{key:"dayCall",label:"Day Call"},{key:"nightCall",label:"Night Call"},{key:"ucc",label:"UCC"}], notes:[]},
+  {key:"gi",    label:"GI",                  hdr:"#6d28d9",
+    columns:[{key:"onService",label:"On-Service"},{key:"nightOncall",label:"Night On-Call"}], notes:[]},
+  {key:"id",    label:"Infectious Disease",  hdr:"#b45309",
+    columns:[{key:"dayConsult",label:"Day Consultation"},{key:"nightConsult",label:"Night Consultation"}], notes:[]},
+  {key:"genetics", label:"Medical Genetics", hdr:"#4d7c0f",
+    columns:[{key:"consultation",label:"Inpatient Consultation"},{key:"nightCall",label:"Night Call"},
+             {key:"nbs",label:"NBS"},{key:"physicalClinic",label:"Physical Clinic"},{key:"virtualClinic",label:"Virtual Clinic"},
+             {key:"daycareAM",label:"Daycare AM"},{key:"daycarePM",label:"Daycare PM"}], notes:[]},
+];
+
+// ── TEMPORARY, admin-only, one-time production seed for Consultant Schedules ──
+// Transcribed directly from the 6 source PDFs in subspecialityConsultantSchedules/,
+// trimmed to Block 11's exact date range (Jul 5 - Aug 1). Keys absent here (not
+// even with status:"none") mean the source PDF didn't cover that date at all --
+// most of these PDFs are full-calendar-month and stop at Jul 31, so Aug 1 has no
+// key for pulm/neuro/neph/gi; GI's source also has no row at all for Jul 17/18/24/25/31.
+// Delete this constant + the seed button/handler in the very next commit after
+// running it once against production -- migration tool, not a feature.
+(function(){
+  const A=text=>({status:"assigned",text});         // a real consultant is on
+  const N=(text="")=>({status:"none",text});          // source explicitly says nobody/no service
+  const v={};
+  const set=(spec,date,col,val)=>{ v[`${spec}|${date}|${col}`]=val; };
+
+  // Pulmonology: onService, nightOncall (day+night always the same person in source)
+  const pulmBlocks=[
+    ["Jul 5","Jul 11","Dr. Fatimah Alsinan"],
+    ["Jul 12","Jul 17","Dr. Samar Albahlool"],
+    ["Jul 19","Jul 23","Dr. Ali Alramadhan"],
+    ["Jul 26","Jul 29","Dr. Samar Albahlool"],
+  ];
+  const pulmGapDays=["Jul 18","Jul 24","Jul 25","Jul 31"];
+  const pulmDates=["Jul 5","Jul 6","Jul 7","Jul 8","Jul 9","Jul 10","Jul 11","Jul 12","Jul 13","Jul 14","Jul 15","Jul 16","Jul 17","Jul 18","Jul 19","Jul 20","Jul 21","Jul 22","Jul 23","Jul 24","Jul 25","Jul 26","Jul 27","Jul 28","Jul 29","Jul 30","Jul 31"];
+  const pulmByDate={};
+  pulmBlocks.forEach(([from,to,name])=>{
+    const fromIdx=pulmDates.indexOf(from), toIdx=pulmDates.indexOf(to);
+    for(let i=fromIdx;i<=toIdx;i++)pulmByDate[pulmDates[i]]=name;
+  });
+  pulmByDate["Jul 30"]="Dr. Samar Albahlool"; // on-service only, no night oncall that day
+  pulmDates.forEach(d=>{
+    const name=pulmByDate[d];
+    if(pulmGapDays.includes(d)){ set("pulm",d,"onService",N()); set("pulm",d,"nightOncall",N()); }
+    else if(name){
+      set("pulm",d,"onService",A(name));
+      set("pulm",d,"nightOncall",d==="Jul 30"?N():A(name));
+    }
+  });
+
+  // Neurology: specDay, specNight, consDay, consNight
+  const neuroRows={
+    "Jul 5":[A("Dr. Abdrabnabi"),A("Dr. Abdrabnabi"),A("Dr. Almubarak"),N()],
+    "Jul 6":[A("Dr. Abdrabnabi"),A("Dr. Abdrabnabi"),A("Dr. Almubarak"),N()],
+    "Jul 7":[A("Dr. Abdrabnabi"),A("Dr. Abdrabnabi"),A("Dr. Almubarak"),N()],
+    "Jul 8":[A("Dr. Abdrabnabi"),A("Dr. Abdrabnabi"),A("Dr. Almubarak"),N()],
+    "Jul 9":[A("Dr. Abdrabnabi"),N(),A("Dr. Almubarak"),A("Dr. Almubarak")],
+    "Jul 10":[N(),N(),A("Dr. Almubarak"),A("Dr. Almubarak")],
+    "Jul 11":[N(),N(),A("Dr. Almubarak"),A("Dr. Almubarak")],
+    "Jul 12":[A("Dr. Abdrabnabi"),N(),A("Dr. Almubarak"),A("Dr. Almubarak")],
+    "Jul 13":[A("Dr. Abdrabnabi"),N(),A("Dr. Almubarak"),A("Dr. Almubarak")],
+    "Jul 14":[A("Dr. Abdrabnabi"),N(),A("Dr. Almubarak"),A("Dr. Almubarak")],
+    "Jul 15":[A("Dr. Abdrabnabi"),N(),A("Dr. Almubarak"),A("Dr. Almubarak")],
+    "Jul 16":[A("Dr. Abdrabnabi"),N(),A("Dr. Almubarak"),A("Dr. Almubarak")],
+    "Jul 17":[A("Dr. Abdrabnabi"),A("Dr. Abdrabnabi"),N(),N()],
+    "Jul 18":[A("Dr. Abdrabnabi"),A("Dr. Abdrabnabi"),N(),N()],
+    "Jul 19":[A("Dr. Abdrabnabi"),N(),A("Dr. Khadem"),A("Dr. Khadem")],
+    "Jul 20":[A("Dr. Abdrabnabi"),N(),A("Dr. Khadem"),A("Dr. Khadem")],
+    "Jul 21":[A("Dr. Abdrabnabi"),N(),A("Dr. Khadem"),A("Dr. Khadem")],
+    "Jul 22":[A("Dr. Abdrabnabi"),N(),A("Dr. Khadem"),A("Dr. Khadem")],
+    "Jul 23":[A("Dr. Abdrabnabi"),N(),A("Dr. Khadem"),A("Dr. Khadem")],
+    "Jul 24":[N(),N(),N(),A("Dr. Khadem")],
+    "Jul 25":[N(),N(),N(),A("Dr. Khadem")],
+    "Jul 26":[A("Dr. Abdrabnabi"),N(),A("Dr. Khadem"),A("Dr. Khadem")],
+    "Jul 27":[A("Dr. Abdrabnabi"),N(),A("Dr. Khadem"),A("Dr. Khadem")],
+    "Jul 28":[A("Dr. Abdrabnabi"),N(),A("Dr. Khadem"),A("Dr. Khadem")],
+    "Jul 29":[A("Dr. Abdrabnabi"),N(),A("Dr. Khadem"),A("Dr. Khadem")],
+    "Jul 30":[A("Dr. Abdrabnabi"),N(),A("Dr. Khadem"),A("Dr. Almubarak")],
+    "Jul 31":[N(),N(),A("Dr. Almubarak"),A("Dr. Almubarak")],
+  };
+  Object.entries(neuroRows).forEach(([d,[specDay,specNight,consDay,consNight]])=>{
+    set("neuro",d,"specDay",specDay); set("neuro",d,"specNight",specNight);
+    set("neuro",d,"consDay",consDay); set("neuro",d,"consNight",consNight);
+  });
+
+  // Hematology: consultation, daycare, am, newborn (covers Jul5-Aug1 exactly)
+  const hemeRows={
+    "Jul 5":[A("Dr.Hana"),A("Dr.M.Darwish"),A("Dr.M.Darwish"),A("Dr.M.Darwish")],
+    "Jul 6":[A("Dr.Hana"),A("Dr.M.Darwish"),A("Dr.M.Darwish"),A("Dr.M.Darwish")],
+    "Jul 7":[A("Dr.Hana"),A("Dr.M.Darwish"),A("Dr.M.Darwish"),A("Dr.M.Darwish")],
+    "Jul 8":[A("Dr.Hana"),A("Dr.M.Darwish"),A("Dr.M.Darwish"),A("Dr.M.Darwish")],
+    "Jul 9":[A("Dr.Hana"),A("Dr.M.Darwish"),A("Dr.M.Darwish"),A("Dr.M.Darwish")],
+    "Jul 10":[N("-"),N("-"),N(),N("-")],
+    "Jul 11":[N("-"),N("-"),N(),N("-")],
+    "Jul 12":[A("Dr.M.Darwish"),N(),A("Dr.M.Darwish"),A("Dr.ESRA")],
+    "Jul 13":[A("Dr.M.Darwish"),N(),A("Dr.M.Darwish"),A("Dr.ESRA")],
+    "Jul 14":[A("Dr.M.Darwish"),A("Dr.ESRA"),A("Dr.ESRA"),A("Dr.ESRA")],
+    "Jul 15":[A("Dr.M.Darwish"),A("Dr.ESRA"),A("Dr.ESRA"),A("Dr.ESRA")],
+    "Jul 16":[A("Dr.M.Darwish"),A("Dr.ESRA"),A("Dr.ESRA"),A("Dr.ESRA")],
+    "Jul 17":[N("-"),N("-"),N(),N("-")],
+    "Jul 18":[N("-"),N("-"),N(),N("-")],
+    "Jul 19":[A("Dr.M.Darwish"),A("Dr.Hana"),A("Dr.Hana"),A("Dr.Hana")],
+    "Jul 20":[A("Dr.M.Darwish"),A("Dr.Hana"),A("Dr.Hana"),A("Dr.Hana")],
+    "Jul 21":[A("Dr.M.Darwish"),A("Dr.Hana"),A("Dr.Hana"),A("Dr.Hana")],
+    "Jul 22":[A("Dr.M.Darwish"),A("Dr.Hana"),A("Dr.Hana"),A("Dr.Hana")],
+    "Jul 23":[A("Dr.M.Darwish"),A("Dr.Hana"),A("Dr.Hana"),A("Dr.Hana")],
+    "Jul 24":[A("Dr.Hana"),N("-"),N(),N("-")],
+    "Jul 25":[A("Dr.Hana"),N("-"),N(),N("-")],
+    "Jul 26":[A("Dr.ESRA"),A("Dr.Hana"),A("Dr.Hana"),A("Dr.ESRA")],
+    "Jul 27":[A("Dr.ESRA"),A("Dr.Hana"),A("Dr.Hana"),A("Dr.ESRA")],
+    "Jul 28":[A("Dr.ESRA"),A("Dr.Hana"),A("Dr.Hana"),A("Dr.ESRA")],
+    "Jul 29":[A("Dr.ESRA"),A("Dr.Hana"),A("Dr.Hana"),A("Dr.ESRA")],
+    "Jul 30":[A("Dr.ESRA"),A("Dr.Hana"),A("Dr.Hana"),A("Dr.ESRA")],
+    "Jul 31":[A("Dr.ESRA"),N("-"),N(),N("-")],
+    "Aug 1":[A("Dr.ESRA"),N("-"),N(),N("-")],
+  };
+  Object.entries(hemeRows).forEach(([d,[consultation,daycare,am,newborn]])=>{
+    set("heme",d,"consultation",consultation); set("heme",d,"daycare",daycare);
+    set("heme",d,"am",am); set("heme",d,"newborn",newborn);
+  });
+
+  // Nephrology: dayCall, nightCall, ucc (ucc only appears on 4 specific days)
+  const nephRows={
+    "Jul 5":["Dr. Jenan","Dr. Jenan",null], "Jul 6":["Dr. Jenan","Dr. Jenan",null],
+    "Jul 7":["Dr. Khadija","Dr. Khadija",null], "Jul 8":["Dr. Khadija","Dr. Khadija",null],
+    "Jul 9":["Dr. Zahra","Dr. Zahra",null], "Jul 10":["Dr. Zahra","Dr. Zahra",null],
+    "Jul 11":["Dr. Zahra","Dr. Zahra",null],
+    "Jul 12":["Dr. Jenan","Dr. Jenan","Dr. Khadija"], "Jul 13":["Dr. Jenan","Dr. Jenan",null],
+    "Jul 14":["Dr. Khadija","Dr. Khadija",null], "Jul 15":["Dr. Khadija","Dr. Khadija",null],
+    "Jul 16":["Dr. Jenan","Dr. Jenan",null], "Jul 17":["Dr. Jenan","Dr. Jenan",null],
+    "Jul 18":["Dr. Jenan","Dr. Jenan",null],
+    "Jul 19":["Dr. Zahra","Dr. Zahra","Dr. Jenan"], "Jul 20":["Dr. Zahra","Dr. Zahra",null],
+    "Jul 21":["Dr. Jenan","Dr. Jenan",null], "Jul 22":["Dr. Jenan","Dr. Jenan","Dr. Khadija"],
+    "Jul 23":["Dr. Zahra","Dr. Zahra",null],
+    "Jul 24":[null,null,null], "Jul 25":[null,null,null],
+    "Jul 26":["Dr. Zahra","Dr. Zahra",null], "Jul 27":["Dr. Zahra","Dr. Zahra",null],
+    "Jul 28":["Dr. Khadija","Dr. Khadija","Dr. Jenan"], "Jul 29":["Dr. Khadija","Dr. Khadija",null],
+    "Jul 30":["Dr. Zahra","Dr. Zahra",null], "Jul 31":[null,null,null],
+  };
+  Object.entries(nephRows).forEach(([d,[dayCall,nightCall,ucc]])=>{
+    set("neph",d,"dayCall",dayCall?A(dayCall):N("-"));
+    set("neph",d,"nightCall",nightCall?A(nightCall):N("-"));
+    if(ucc)set("neph",d,"ucc",A(ucc)); // else left absent (UCC is sparse; no data most days)
+  });
+
+  // GI: onService, nightOncall. Dr. Afnan on vacation 2-16 Jul ("No service"); Jul17/18/24/25/31 have
+  // no row at all in the source (structural no-data, left absent, not even status:"none").
+  const giNoService=["Jul 5","Jul 6","Jul 7","Jul 8","Jul 9","Jul 10","Jul 11","Jul 12","Jul 13","Jul 14","Jul 15","Jul 16"];
+  giNoService.forEach(d=>{ set("gi",d,"onService",N("No service")); });
+  const giOnDates=["Jul 19","Jul 20","Jul 21","Jul 22","Jul 23","Jul 26","Jul 27","Jul 28","Jul 29","Jul 30"];
+  giOnDates.forEach(d=>{
+    set("gi",d,"onService",A("Dr. Afnan Al Jawad"));
+    set("gi",d,"nightOncall",["Jul 19","Jul 20","Jul 21","Jul 22","Jul 23"].includes(d)?A("Dr. Afnan Al Jawad"):N());
+  });
+  // Jul 17,18,24,25,31 and Aug 1: left entirely absent (no key) -- no source row / PDF doesn't cover Aug 1.
+
+  // Infectious Disease: dayConsult, nightConsult (covers Jul5-Aug1 exactly)
+  const idRows={
+    "Jul 5":["Dr. Shefa","Dr. Shefa"], "Jul 6":["Dr. Shefa","Dr. Shefa"], "Jul 7":["Dr. Shefa","Dr. Shefa"],
+    "Jul 8":["Dr. Shefa","Dr. Shefa"], "Jul 9":["Dr. Shefa","Dr. Shefa"], "Jul 10":["Dr. Shefa","Dr. Shefa"],
+    "Jul 11":["Dr. Shefa","Dr. Shefa"],
+    "Jul 12":["Dr. Zainab","Dr. Zainab"], "Jul 13":["Dr. Zainab","Dr. Zainab"], "Jul 14":["Dr. Zainab","Dr. Zainab"],
+    "Jul 15":["Dr. Zainab","Dr. Zainab"], "Jul 16":["Dr. Shefa","Dr. Zainab"],
+    "Jul 17":["Dr. Zainab","Dr. Zainab"], "Jul 18":["Dr. Zainab","Dr. Zainab"],
+    "Jul 19":["Dr. Shefa","Dr. Shefa"], "Jul 20":["Dr. Shefa","Dr. Shefa"], "Jul 21":["Dr. Shefa","Dr. Shefa"],
+    "Jul 22":["Dr. Shefa","No Coverage"], "Jul 23":["Dr. Shefa","No Coverage"],
+    "Jul 24":["No Coverage","No Coverage"], "Jul 25":["No Coverage","No Coverage"],
+    "Jul 26":["Dr. Zainab","Dr. Zainab"], "Jul 27":["Dr. Zainab","Dr. Zainab"], "Jul 28":["Dr. Zainab","Dr. Zainab"],
+    "Jul 29":["Dr. Zainab","No Coverage"], "Jul 30":["No Coverage","No Coverage"], "Jul 31":["No Coverage","No Coverage"],
+    "Aug 1":["No Coverage","No Coverage"],
+  };
+  Object.entries(idRows).forEach(([d,[dayConsult,nightConsult]])=>{
+    set("id",d,"dayConsult",dayConsult.startsWith("No")?N(dayConsult):A(dayConsult));
+    set("id",d,"nightConsult",nightConsult.startsWith("No")?N(nightConsult):A(nightConsult));
+  });
+
+  // Medical Genetics: consultation, nightCall, nbs, physicalClinic, virtualClinic, daycareAM, daycarePM
+  // (7 columns -- source PDF's title says "June 2026" but every row's day-of-week matches the real
+  // July 2026 calendar exactly, so the data itself is trusted; only the title text has a typo).
+  const geneticsRows={
+    "Jul 5":["Rawda","Rawda","Rawda",null,"Rawda","Rawda","Rawda"],
+    "Jul 6":["Rawda","Rawda","Rawda","Rawda","Rawda","Rawda","Rawda"],
+    "Jul 7":["Rawda","Rawda","Rawda",null,"Rawda","Rawda","Rawda"],
+    "Jul 8":["Rawda","Rawda","Rawda","Rawda","Rawda","Rawda","Rawda"],
+    "Jul 9":["Rawda","Rawda","Rawda",null,"Rawda","Rawda","Rawda"],
+    "Jul 10":["Rawda","Rawda","Rawda",null,null,null,null],
+    "Jul 11":["Rawda","Rawda","Rawda",null,null,null,null],
+    "Jul 12":["Rawda","Rawda","Rawda",null,"Rawda","Rawda","Rawda"],
+    "Jul 13":["Rawda","Rawda","Rawda","Rawda","Rawda","Rawda","Shirin"],
+    "Jul 14":["Rawda","Rawda","Rawda",null,"Rawda","Rawda","Rawda"],
+    "Jul 15":["Rawda",null,"Rawda","Rawda","Rawda","Rawda","Rawda"],
+    "Jul 16":["Rawda",null,"Rawda",null,"Rawda","Rawda","Rawda"],
+    "Jul 17":[null,null,null,null,null,null,null],
+    "Jul 18":[null,null,null,null,null,null,null],
+    "Jul 19":["Rawda",null,"Rawda",null,"Rawda","Rawda","Rawda"],
+    "Jul 20":["Rawda",null,"Rawda","Rawda","Rawda","Rawda","Rawda"],
+    "Jul 21":["Rawda",null,"Rawda",null,"Rawda","Rawda","Rawda"],
+    "Jul 22":["Rawda",null,"Rawda","Rawda","Rawda","Rawda","Rawda"],
+    "Jul 23":["Rawda",null,"Rawda",null,"Rawda","Rawda","Rawda"],
+    "Jul 24":[null,null,null,null,null,null,null],
+    "Jul 25":[null,null,null,null,null,null,null],
+    "Jul 26":["Rawda",null,"Rawda",null,"Rawda","Rawda","Rawda"],
+    "Jul 27":["Rawda",null,"Rawda","Rawda","Rawda","Rawda","Rawda"],
+    "Jul 28":["Rawda",null,"Rawda",null,"Rawda","Rawda","Rawda"],
+    "Jul 29":["Rawda",null,"Rawda","Rawda","Rawda","Rawda","Rawda"],
+    "Jul 30":["Rawda",null,"Rawda",null,"Rawda","Rawda","Rawda"],
+    "Jul 31":[null,null,null,null,null,null,null],
+  };
+  Object.entries(geneticsRows).forEach(([d,[consultation,nightCall,nbs,physicalClinic,virtualClinic,daycareAM,daycarePM]])=>{
+    set("genetics",d,"consultation",consultation?A(`Dr. ${consultation}`):N());
+    set("genetics",d,"nightCall",nightCall?A(`Dr. ${nightCall}`):N());
+    set("genetics",d,"nbs",nbs?A(`Dr. ${nbs}`):N());
+    set("genetics",d,"physicalClinic",physicalClinic?A(`Dr. ${physicalClinic}`):N());
+    set("genetics",d,"virtualClinic",virtualClinic?A(`Dr. ${virtualClinic}`):N());
+    set("genetics",d,"daycareAM",daycareAM?A(`Dr. ${daycareAM}`):N());
+    set("genetics",d,"daycarePM",daycarePM?A(`Dr. ${daycarePM}`):N());
+  });
+  // Aug 1: left entirely absent -- this PDF, like most others, doesn't cover it.
+
+  window.SEED_consultantValues=v;
+})();
+
 // For one day, split each team's members into available / post-call / vacation /
 // unavailable, grouped by level. "Available" = present for daytime coverage:
 // NOT post-call (on-call the night before -> off), NOT on vacation that week,
@@ -1608,6 +1849,135 @@ function CoveragePage({sched,manualUnavail,onSetStatus,onClearAllStatus}){
   );
 }
 
+// ── Subspecialty Consultant Schedules Page ────────────────────────────────
+// Synchronizes 6 separate consultant-schedule PDFs into one page: for each
+// Block 11 day, shows every specialty's own real column set side by side
+// (rendered generically from CONSULTANT_SPECIALTIES, not a fixed shape).
+// Three cell states: assigned (a name), none (explicit no-service/no-coverage
+// from the source), and no-data (the source PDF simply didn't cover that
+// date -- most specialties' PDFs stop at Jul 31, so Aug 1 is "no data" for
+// them, not "no service"). Admin-only inline edit, enforced for real by
+// firestore.rules, not just this client-side isAdmin check.
+function ConsultantSchedulesPage({sched,consultantValues,onSetCell,isAdmin}){
+  const[editingKey,setEditingKey]=React.useState(null); // "specKey|date|colKey" of open inline editor
+  const weeks=[
+    {label:"Week 1",dates:"Jul 5 – 11",   lo:0, hi:7},
+    {label:"Week 2",dates:"Jul 12 – 18",  lo:7, hi:14},
+    {label:"Week 3",dates:"Jul 19 – 25",  lo:14,hi:21},
+    {label:"Week 4",dates:"Jul 26 – Aug 1",lo:21,hi:28},
+  ];
+
+  const assignedStyle={fontSize:10.5,fontWeight:600,color:"#1e293b",background:"#f8fafc",border:"1px solid #cbd5e1",borderRadius:3,padding:"2px 6px",display:"block"};
+  const noneStyle={fontSize:10,fontWeight:500,color:"#991b1b",background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:3,padding:"2px 6px",display:"block"};
+  const noDataStyle={fontSize:10,fontStyle:"italic",color:"#94a3b8",background:"#fff",border:"1px dashed #cbd5e1",borderRadius:3,padding:"2px 6px",display:"block"};
+
+  const commit=(specKey,date,colKey,text)=>{
+    const trimmed=(text||"").trim();
+    if(trimmed)onSetCell(specKey,date,colKey,{status:"assigned",text:trimmed});
+    setEditingKey(null);
+  };
+
+  function Cell({specKey,date,colKey}){
+    const cellKey=`${specKey}|${date}|${colKey}`;
+    const val=consultantValues[cellKey]; // undefined = no data; else {status:"none"|"assigned",text}
+    const isEditing=editingKey===cellKey;
+
+    if(isEditing){
+      return(
+        <div onClick={e=>e.stopPropagation()} style={{padding:"3px 4px",background:"#fff",border:"1px solid #1e3a5f",borderRadius:4}}>
+          <input autoFocus defaultValue={val?.text||""}
+            onKeyDown={e=>{
+              if(e.key==="Enter")commit(specKey,date,colKey,e.currentTarget.value);
+              if(e.key==="Escape")setEditingKey(null);
+            }}
+            onBlur={e=>{ if(e.currentTarget.value.trim())commit(specKey,date,colKey,e.currentTarget.value); else setEditingKey(null); }}
+            style={{width:"100%",fontSize:10.5,padding:"2px 4px",border:"1px solid #cbd5e1",borderRadius:3,marginBottom:3,boxSizing:"border-box"}}/>
+          <div style={{display:"flex",gap:3}}>
+            <button onMouseDown={e=>e.preventDefault()} onClick={()=>{onSetCell(specKey,date,colKey,{status:"none",text:""});setEditingKey(null);}}
+              style={{fontSize:9,padding:"1px 5px",borderRadius:3,border:"1px solid #fca5a5",background:"#fef2f2",color:"#991b1b",cursor:"pointer"}}>No service</button>
+            {val&&<button onMouseDown={e=>e.preventDefault()} onClick={()=>{onSetCell(specKey,date,colKey,null);setEditingKey(null);}}
+              style={{fontSize:9,padding:"1px 5px",borderRadius:3,border:"1px solid #cbd5e1",background:"#f8fafc",color:"#64748b",cursor:"pointer"}}>Clear</button>}
+          </div>
+        </div>
+      );
+    }
+
+    const onClick=isAdmin?(e=>{e.stopPropagation();setEditingKey(cellKey);}):undefined;
+    if(!val)return <span onClick={onClick} title="Not covered by source schedule" style={{...noDataStyle,cursor:isAdmin?"pointer":"default"}}>—</span>;
+    if(val.status==="none")return <span onClick={onClick} style={{...noneStyle,cursor:isAdmin?"pointer":"default"}}>{val.text||"No consultant listed"}</span>;
+    return <span onClick={onClick} style={{...assignedStyle,cursor:isAdmin?"pointer":"default"}}>{val.text}</span>;
+  }
+
+  return(
+    <div onClick={()=>setEditingKey(null)}>
+      {/* Legend / how-to */}
+      <div style={{background:"#fff",borderRadius:8,border:"1px solid #e2e8f0",padding:"8px 12px",marginBottom:8,
+        fontSize:11,color:"#475569",display:"flex",flexWrap:"wrap",gap:"6px 14px",alignItems:"center"}}>
+        <span style={{fontWeight:800,color:"#1e3a5f",fontSize:12}}>🧑‍⚕️ Subspecialty Consultant Schedules</span>
+        <span>Who's covering each subspecialty, synchronized in one place — no more checking separate PDFs.{isAdmin&&<strong> Click any cell</strong>}{isAdmin&&" to edit."}</span>
+        <span style={{display:"flex",gap:10,alignItems:"center",marginLeft:"auto",flexShrink:0}}>
+          <span style={assignedStyle}>Dr. Name</span>
+          <span style={noneStyle}>No service</span>
+          <span style={noDataStyle}>—</span>
+        </span>
+      </div>
+
+      {/* Block-wide notes (e.g. Hematology's general on-call + vacations) that don't fit a per-day cell */}
+      {CONSULTANT_SPECIALTIES.filter(s=>s.notes.length>0).map(s=>(
+        <div key={s.key} style={{background:"#fff",border:`1px solid ${s.hdr}55`,borderLeft:`3px solid ${s.hdr}`,borderRadius:6,padding:"6px 10px",marginBottom:8,fontSize:10.5,color:"#475569"}}>
+          <strong style={{color:s.hdr}}>{s.label} notes:</strong> {s.notes.join(" · ")}
+        </div>
+      ))}
+
+      {weeks.map(w=>(
+        <div key={w.label}>
+          <div style={{background:"#1e293b",color:"#e2e8f0",fontSize:11,fontWeight:800,letterSpacing:"0.06em",
+            textTransform:"uppercase",padding:"5px 12px",borderRadius:6,margin:"12px 0 6px"}}>
+            {w.label} <span style={{color:"#94a3b8",fontWeight:600,marginLeft:6}}>{w.dates}</span>
+          </div>
+          {sched.slice(w.lo,w.hi).map(row=>{
+            const isWE=row.type==="WE";
+            return(
+              <div key={row.date} style={{background:"#fff",borderRadius:8,marginBottom:8,
+                border:`1px solid ${isWE?"#bae6fd":"#e2e8f0"}`,boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+                <div style={{background:isWE?"#0369a1":"#1e293b",color:"#fff",padding:"5px 12px",
+                  borderTopLeftRadius:7,borderTopRightRadius:7,
+                  display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontWeight:800,fontSize:13}}>{row.day}</span>
+                    <span style={{fontSize:12,opacity:0.9}}>{row.date}</span>
+                    {isWE&&<span style={{fontSize:9.5,background:"rgba(255,255,255,0.25)",borderRadius:3,padding:"1px 5px",fontWeight:700}}>WEEKEND</span>}
+                  </div>
+                  <span style={{fontSize:10.5,opacity:0.8}}>{row.greg} · {row.hijri}</span>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:1,background:"#e5e7eb"}}>
+                  {CONSULTANT_SPECIALTIES.map(spec=>(
+                    <div key={spec.key} style={{background:"#fff",padding:"6px 8px",minWidth:0}}>
+                      <span style={{fontSize:9.5,fontWeight:800,color:"#fff",background:spec.hdr,borderRadius:3,
+                        padding:"1px 6px",letterSpacing:"0.03em",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",
+                        display:"inline-block",marginBottom:5}}>
+                        {spec.label}
+                      </span>
+                      <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                        {spec.columns.map(col=>(
+                          <div key={col.key}>
+                            <div style={{fontSize:8.5,color:"#94a3b8",fontWeight:600,marginBottom:1}}>{col.label}</div>
+                            <Cell specKey={spec.key} date={row.date} colKey={col.key}/>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Mobile Day Card ───────────────────────────────────────────────────────────
 function MobileDayCard({row, selected, addTarget, setAddTarget, setAddSearch,
   handleCellClick, handleBadgeClick, getBadgeStyle, isAdmin}){
@@ -1755,6 +2125,48 @@ function App(){
     writeManualUnavail(next);
   };
   const handleClearAllStatus=()=>{if(!isAdmin)return;writeManualUnavail({});};
+
+  // Subspecialty Consultant Schedules: keyed by "specKey|date|colKey" ->
+  // {status:"assigned"|"none", text}. Key absent entirely = the source PDF
+  // didn't cover that date (e.g. most specialties' PDFs stop at Jul 31, so
+  // Aug 1 has no key at all) -- distinct from status:"none", which means the
+  // source explicitly said no one was on (e.g. "No service"/"No Coverage").
+  // Same Firestore whole-doc listener/writer pattern as sched/manualUnavail.
+  const[consultantValues,setConsultantValues]=useState({});
+  useEffect(()=>{
+    return firebase.firestore().collection('consultantSchedules').doc('block11')
+      .onSnapshot(snap=>{ setConsultantValues(snap.exists?snap.data().values:{}); });
+  },[]);
+  const consultantSchedulesDocRef=firebase.firestore().collection('consultantSchedules').doc('block11');
+  const writeConsultantSchedules=(values)=>consultantSchedulesDocRef.set({
+    values, updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+    updatedBy:firebase.auth().currentUser?.uid||null,
+  });
+  const handleSetConsultantCell=(specKey,date,colKey,value)=>{
+    if(!isAdmin)return;
+    const key=`${specKey}|${date}|${colKey}`;
+    const next={...consultantValues};
+    if(value===null){delete next[key];}else{next[key]=value;}
+    writeConsultantSchedules(next);
+  };
+  // ── TEMPORARY, admin-only, one-time production seed ──
+  // Copies the SEED_consultantValues constant (transcribed from the source PDFs)
+  // into Firestore once. Delete this handler + its button in the very next
+  // commit after running it once against production -- same lifecycle as the
+  // main schedule's one-time import (commits 6ba5fcd/26acd07).
+  const[seedMsg,setSeedMsg]=useState("");
+  const handleSeedConsultantSchedules=async()=>{
+    if(!isAdmin)return;
+    if(!window.confirm("This overwrites the LIVE Consultant Schedules data in Firestore with the seed snapshot. Run this only once, during initial setup. Continue?"))return;
+    setSeedMsg("Seeding…");
+    try{
+      await writeConsultantSchedules(window.SEED_consultantValues);
+      setSeedMsg("Seeded ✓");
+    }catch(e){
+      setSeedMsg("Failed: "+(e.message||e));
+    }
+    setTimeout(()=>setSeedMsg(""),5000);
+  };
 
   // Resident metadata (rotations/levels/vacations/profiles/master rota) is
   // just the embedded DEFAULT_* constants above -- no fetch, no backend.
@@ -1956,7 +2368,7 @@ function App(){
 
         {/* ── Page tabs ── */}
         <div style={{display:"flex",gap:0,marginBottom:10,borderBottom:"2px solid #e2e8f0"}}>
-          {[["schedule","📅 Schedule"],["coverage","🩺 Daytime Coverage"],["residents","👤 Residents"],["rota","📋 Master Rota"]].map(([p,label])=>(
+          {[["schedule","📅 Schedule"],["coverage","🩺 Daytime Coverage"],["consultants","🧑‍⚕️ Subspecialty Consultants"],["residents","👤 Residents"],["rota","📋 Master Rota"]].map(([p,label])=>(
             <button key={p} onClick={()=>setPage(p)} style={{
               padding:"6px 18px",fontSize:12,fontWeight:700,cursor:"pointer",border:"none",
               background:"none",borderBottom:`3px solid ${page===p?"#1e3a5f":"transparent"}`,
@@ -1986,6 +2398,7 @@ function App(){
               {isAdmin&&<button onClick={undo} disabled={!history.length} style={{padding:"2px 9px",borderRadius:4,fontSize:11,fontWeight:600,cursor:history.length?"pointer":"default",background:history.length?"#fffbeb":"#f9fafb",color:history.length?"#92400e":"#9ca3af",border:`1px solid ${history.length?"#fcd34d":"#e5e7eb"}`}}>↩ Undo{history.length?` (${history.length})`:""}</button>}
               {isAdmin&&<button onClick={reset} style={{padding:"2px 9px",borderRadius:4,fontSize:11,fontWeight:600,cursor:"pointer",background:"#fef2f2",color:"#991b1b",border:"1px solid #fca5a5"}}>↺ Reset</button>}
               {isAdmin&&<button onClick={recommendDayCalls} title="Auto-fill empty day call slots" style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"#b45309",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4}}><span>✦</span> Recommend Day Calls</button>}
+              {isAdmin&&<button onClick={handleSeedConsultantSchedules} title="ONE-TIME migration tool: overwrites live Consultant Schedules data with the seed snapshot. Delete after use." style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:seedMsg==="Seeded ✓"?"#166534":"#7c2d12",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4}}><span>⚠️</span>{seedMsg||"Seed Consultant Schedules (one-time)"}</button>}
               <button onClick={handleExport} disabled={exporting} style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:exporting?"default":"pointer",background:exporting?"#94a3b8":"#1e3a5f",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4}}>
                 {exporting?<><span>⏳</span> Generating…</>:<><span>📄</span> Export DOCX</>}
               </button>
@@ -2025,6 +2438,8 @@ function App(){
             ?"👤 Individual resident schedules — vacation, unwanted days, constraints, and call details with gap analysis."
             :page==="coverage"
             ?"🩺 Daytime team coverage for every day — who's present vs post-call/on-vacation, by team & level. Use it to pull an available resident into a short team."
+            :page==="consultants"
+            ?"🧑‍⚕️ Subspecialty consultant on-call schedules, synchronized into one page instead of separate PDFs. Cardiology and Orthopedics aren't included yet (no valid Block 11 data)."
             :spotlight
               ?selected
                 ?<span>✦ <strong>{selected.name}</strong> selected from <em>{selected.fromDate} {slotLabel[selected.fromSlot]}</em> — click any cell to move, or pick a different call in the side panel.</span>
@@ -2073,6 +2488,13 @@ function App(){
       {page==="coverage"&&(
         <div onClick={e=>e.stopPropagation()}>
           <CoveragePage sched={sched} manualUnavail={manualUnavail} onSetStatus={handleSetStatus} onClearAllStatus={handleClearAllStatus}/>
+        </div>
+      )}
+
+      {/* ── PAGE 5: Subspecialty Consultant Schedules ── */}
+      {page==="consultants"&&(
+        <div onClick={e=>e.stopPropagation()}>
+          <ConsultantSchedulesPage sched={sched} consultantValues={consultantValues} onSetCell={handleSetConsultantCell} isAdmin={isAdmin}/>
         </div>
       )}
 
