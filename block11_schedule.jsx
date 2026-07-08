@@ -766,6 +766,7 @@ export default function App(){
     const idx=sched.findIndex(r=>r.date===todayDateLabel());
     return idx>=0?idx:0;
   });
+  const[fullView,setFullView]=useState(false); // toggles the Schedule tab between single-day and the full 28-day grid
 
   // ── Fetch resident data from the backend on load; fall back to the
   // DEFAULT_* snapshots above if it's unreachable (e.g. published standalone
@@ -888,6 +889,116 @@ export default function App(){
   const handleExport=async()=>{setExporting(true);setExportErr("");try{await exportDocx(sched);}catch(err){console.error(err);setExportErr("Export failed.");}finally{setExporting(false);}};
   const handleSave=()=>{localStorage.setItem('block11_sched',JSON.stringify(sched));setSaveMsg("Saved ✓");setTimeout(()=>setSaveMsg(""),2500);};
 
+  const weeks=[
+    {label:"W1",dates:"Jul 5–11",rows:sched.slice(0,7)},
+    {label:"W2",dates:"Jul 12–18",rows:sched.slice(7,14)},
+    {label:"W3",dates:"Jul 19–25",rows:sched.slice(14,21)},
+    {label:"W4",dates:"Jul 26–Aug 1",rows:sched.slice(21,28)},
+  ];
+
+  // Renders one <tr> of the schedule table -- shared by the single-day view
+  // (one call) and the full-grid view (one call per row in weeks.map).
+  const renderScheduleRow=(row,bb)=>{
+    const isWE=row.type==="WE";
+    const isToday=row.date===todayDateLabel();
+    return(
+      <tr key={row.date} style={{borderBottom:bb}}>
+          <td style={{padding:"5px 8px",fontWeight:700,fontSize:11,color:isToday?"#b45309":isWE?"#0369a1":"#1e293b",
+            borderRight:"1px solid #d1d5db",borderBottom:bb,
+            background:isToday?"#fef3c7":isWE?"#e0f2fe":"#f8fafc",position:"sticky",left:0,zIndex:1,whiteSpace:"nowrap"}}>
+            {row.day}{isToday&&<div style={{fontSize:7.5,fontWeight:700,color:"#b45309",lineHeight:1}}>TODAY</div>}
+            {!isToday&&isWE&&<div style={{fontSize:7.5,fontWeight:500,color:"#0284c7",lineHeight:1}}>WE</div>}
+          </td>
+          <td style={{padding:"5px 6px",textAlign:"center",fontWeight:600,fontSize:11,color:"#374151",
+            background:isWE?"#f0f9ff":"#fff",borderRight:"1px solid #d1d5db",borderBottom:bb,
+            whiteSpace:"nowrap"}}>{row.greg}</td>
+          <td style={{padding:"5px 6px",textAlign:"center",fontSize:10.5,color:"#6b7280",
+            background:isWE?"#f0f9ff":"#fff",borderRight:"1px solid #d1d5db",borderBottom:bb,
+            fontFamily:"serif",whiteSpace:"nowrap"}}>{row.hijri}</td>
+          {slots.map(s=>{
+            const isPickerOpen=addTarget?.date===row.date&&addTarget?.slot===s;
+            const lvOrder=["R4","R3","R2","R1"];
+            const allNames=lvOrder.flatMap(lv=>Object.keys(levelMap).filter(n=>levelMap[n]===lv&&!row[s].includes(n)));
+            const filtered=addSearch?allNames.filter(n=>n.toLowerCase().includes(addSearch.toLowerCase())):allNames;
+            return(
+            <td key={s} onClick={e=>{e.stopPropagation();handleCellClick(row.date,s);}}
+              style={{...getCellStyle(isWE,row.date,s),borderBottom:bb,position:"relative",verticalAlign:"top",paddingBottom:18}}>
+              {row[s].length===0
+                ?<span style={{color:"#d1d5db",fontSize:10}}>—</span>
+                :<div style={{display:"flex",flexWrap:"wrap",gap:2}}>
+                  {row[s].map(name=>(
+                    <span key={name} onClick={e=>handleBadgeClick(e,name,row.date,s)}
+                      style={getBadgeStyle(name,row.date,s)} title={`${name} (${rotationMap[name]||""}) — click to select`}>
+                      {name}
+                      {levelMap[name]&&<span style={{fontSize:8.5,opacity:0.65,fontWeight:500}}>·{levelMap[name]}</span>}
+                    </span>
+                  ))}
+                </div>}
+              {/* ── Add-resident button ── */}
+              <button
+                onClick={e=>{e.stopPropagation();setAddTarget(isPickerOpen?null:{date:row.date,slot:s});setAddSearch("");}}
+                title="Add resident to this slot"
+                style={{position:"absolute",bottom:2,right:3,fontSize:11,lineHeight:1,fontWeight:700,
+                  padding:"0 5px",borderRadius:3,border:"1px solid #94a3b8",
+                  background:isPickerOpen?"#1e3a5f":"#f1f5f9",
+                  color:isPickerOpen?"#fff":"#475569",cursor:"pointer",opacity:0.7}}>
+                +
+              </button>
+              {/* ── Resident picker dropdown ── */}
+              {isPickerOpen&&(
+                <div onClick={e=>e.stopPropagation()}
+                  style={{position:"absolute",bottom:"100%",right:0,zIndex:100,
+                    background:"#fff",border:"1px solid #cbd5e1",borderRadius:6,
+                    boxShadow:"0 6px 20px rgba(0,0,0,0.18)",width:175,
+                    display:"flex",flexDirection:"column",overflow:"hidden"}}>
+                  <div style={{padding:"5px 7px",borderBottom:"1px solid #e2e8f0",background:"#f8fafc",
+                    fontSize:9.5,fontWeight:700,color:"#1e293b",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <span>Add to {slotLabel[s]}</span>
+                    <button onClick={()=>setAddTarget(null)} style={{background:"none",border:"none",cursor:"pointer",color:"#94a3b8",fontSize:13,lineHeight:1}}>×</button>
+                  </div>
+                  <input
+                    autoFocus
+                    placeholder="Search…"
+                    value={addSearch}
+                    onChange={e=>setAddSearch(e.target.value)}
+                    onClick={e=>e.stopPropagation()}
+                    style={{padding:"4px 8px",fontSize:11,border:"none",borderBottom:"1px solid #e2e8f0",outline:"none"}}
+                  />
+                  <div style={{maxHeight:200,overflowY:"auto"}}>
+                    {filtered.length===0&&<div style={{padding:"8px 10px",fontSize:10.5,color:"#94a3b8"}}>No match</div>}
+                    {lvOrder.map(lv=>{
+                      const lvNames=filtered.filter(n=>levelMap[n]===lv);
+                      if(!lvNames.length)return null;
+                      return(
+                        <div key={lv}>
+                          <div style={{padding:"3px 8px",fontSize:8.5,fontWeight:700,color:"#94a3b8",
+                            background:"#f8fafc",textTransform:"uppercase",letterSpacing:"0.06em",
+                            borderBottom:"1px solid #f1f5f9"}}>{lv}</div>
+                          {lvNames.map(name=>(
+                            <div key={name}
+                              onClick={()=>handleAddToSlot(name,row.date,s)}
+                              style={{padding:"5px 10px",fontSize:11,fontWeight:500,color:"#1e293b",
+                                cursor:"pointer",borderBottom:"1px solid #f8fafc",display:"flex",
+                                justifyContent:"space-between",alignItems:"center"}}
+                              onMouseEnter={e=>e.currentTarget.style.background="#f0f9ff"}
+                              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                              <span>{name}</span>
+                              <span style={{fontSize:9,color:"#94a3b8"}}>{rotationMap[name]||""}</span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </td>
+            );
+          })}
+      </tr>
+    );
+  };
+
   return(
     <div onClick={()=>{if(selected)setSelected(null);if(addTarget)setAddTarget(null);}}
       style={{fontFamily:"'Inter',system-ui,sans-serif",background:"#f8fafc",minHeight:"100vh",padding:12}}>
@@ -1009,8 +1120,21 @@ export default function App(){
       {/* ── PAGE 1: Schedule table + log ── */}
       {page==="schedule"&&(
       <React.Fragment>
+      {/* View toggle: single-day (default) vs the full 28-day grid */}
+      <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:6,marginBottom:8}}>
+        <button onClick={()=>setFullView(false)}
+          style={{padding:"6px 14px",borderRadius:6,fontSize:12,fontWeight:700,cursor:"pointer",
+            border:`1px solid ${!fullView?"#1e3a5f":"#cbd5e1"}`,background:!fullView?"#1e3a5f":"#fff",color:!fullView?"#fff":"#475569"}}>
+          📅 Day View
+        </button>
+        <button onClick={()=>setFullView(true)}
+          style={{padding:"6px 14px",borderRadius:6,fontSize:12,fontWeight:700,cursor:"pointer",
+            border:`1px solid ${fullView?"#1e3a5f":"#cbd5e1"}`,background:fullView?"#1e3a5f":"#fff",color:fullView?"#fff":"#475569"}}>
+          📋 Full Schedule
+        </button>
+      </div>
       {/* Day navigator: Prev / current day + jump-to-date / Next -- one day at a time, defaulting to today */}
-      {sched.length>0&&(()=>{
+      {!fullView&&sched.length>0&&(()=>{
         const row=sched[dayIdx];
         const isWE=row.type==="WE";
         const isToday=row.date===todayDateLabel();
@@ -1078,108 +1202,20 @@ export default function App(){
               </tr>
             </thead>
             <tbody>
-              {sched.length>0&&(()=>{
-                const row=sched[dayIdx];
-                const isWE=row.type==="WE";
-                const isToday=row.date===todayDateLabel();
-                const bb="2px solid #94a3b8";
-                return(
-                      <tr key={row.date} style={{borderBottom:bb}}>
-                          <td style={{padding:"5px 8px",fontWeight:700,fontSize:11,color:isToday?"#b45309":isWE?"#0369a1":"#1e293b",
-                            borderRight:"1px solid #d1d5db",borderBottom:bb,
-                            background:isToday?"#fef3c7":isWE?"#e0f2fe":"#f8fafc",position:"sticky",left:0,zIndex:1,whiteSpace:"nowrap"}}>
-                            {row.day}{isToday&&<div style={{fontSize:7.5,fontWeight:700,color:"#b45309",lineHeight:1}}>TODAY</div>}
-                            {!isToday&&isWE&&<div style={{fontSize:7.5,fontWeight:500,color:"#0284c7",lineHeight:1}}>WE</div>}
-                          </td>
-                          <td style={{padding:"5px 6px",textAlign:"center",fontWeight:600,fontSize:11,color:"#374151",
-                            background:isWE?"#f0f9ff":"#fff",borderRight:"1px solid #d1d5db",borderBottom:bb,
-                            whiteSpace:"nowrap"}}>{row.greg}</td>
-                          <td style={{padding:"5px 6px",textAlign:"center",fontSize:10.5,color:"#6b7280",
-                            background:isWE?"#f0f9ff":"#fff",borderRight:"1px solid #d1d5db",borderBottom:bb,
-                            fontFamily:"serif",whiteSpace:"nowrap"}}>{row.hijri}</td>
-                          {slots.map(s=>{
-                            const isPickerOpen=addTarget?.date===row.date&&addTarget?.slot===s;
-                            const lvOrder=["R4","R3","R2","R1"];
-                            const allNames=lvOrder.flatMap(lv=>Object.keys(levelMap).filter(n=>levelMap[n]===lv&&!row[s].includes(n)));
-                            const filtered=addSearch?allNames.filter(n=>n.toLowerCase().includes(addSearch.toLowerCase())):allNames;
-                            return(
-                            <td key={s} onClick={e=>{e.stopPropagation();handleCellClick(row.date,s);}}
-                              style={{...getCellStyle(isWE,row.date,s),borderBottom:bb,position:"relative",verticalAlign:"top",paddingBottom:18}}>
-                              {row[s].length===0
-                                ?<span style={{color:"#d1d5db",fontSize:10}}>—</span>
-                                :<div style={{display:"flex",flexWrap:"wrap",gap:2}}>
-                                  {row[s].map(name=>(
-                                    <span key={name} onClick={e=>handleBadgeClick(e,name,row.date,s)}
-                                      style={getBadgeStyle(name,row.date,s)} title={`${name} (${rotationMap[name]||""}) — click to select`}>
-                                      {name}
-                                      {levelMap[name]&&<span style={{fontSize:8.5,opacity:0.65,fontWeight:500}}>·{levelMap[name]}</span>}
-                                    </span>
-                                  ))}
-                                </div>}
-                              {/* ── Add-resident button ── */}
-                              <button
-                                onClick={e=>{e.stopPropagation();setAddTarget(isPickerOpen?null:{date:row.date,slot:s});setAddSearch("");}}
-                                title="Add resident to this slot"
-                                style={{position:"absolute",bottom:2,right:3,fontSize:11,lineHeight:1,fontWeight:700,
-                                  padding:"0 5px",borderRadius:3,border:"1px solid #94a3b8",
-                                  background:isPickerOpen?"#1e3a5f":"#f1f5f9",
-                                  color:isPickerOpen?"#fff":"#475569",cursor:"pointer",opacity:0.7}}>
-                                +
-                              </button>
-                              {/* ── Resident picker dropdown ── */}
-                              {isPickerOpen&&(
-                                <div onClick={e=>e.stopPropagation()}
-                                  style={{position:"absolute",bottom:"100%",right:0,zIndex:100,
-                                    background:"#fff",border:"1px solid #cbd5e1",borderRadius:6,
-                                    boxShadow:"0 6px 20px rgba(0,0,0,0.18)",width:175,
-                                    display:"flex",flexDirection:"column",overflow:"hidden"}}>
-                                  <div style={{padding:"5px 7px",borderBottom:"1px solid #e2e8f0",background:"#f8fafc",
-                                    fontSize:9.5,fontWeight:700,color:"#1e293b",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                                    <span>Add to {slotLabel[s]}</span>
-                                    <button onClick={()=>setAddTarget(null)} style={{background:"none",border:"none",cursor:"pointer",color:"#94a3b8",fontSize:13,lineHeight:1}}>×</button>
-                                  </div>
-                                  <input
-                                    autoFocus
-                                    placeholder="Search…"
-                                    value={addSearch}
-                                    onChange={e=>setAddSearch(e.target.value)}
-                                    onClick={e=>e.stopPropagation()}
-                                    style={{padding:"4px 8px",fontSize:11,border:"none",borderBottom:"1px solid #e2e8f0",outline:"none"}}
-                                  />
-                                  <div style={{maxHeight:200,overflowY:"auto"}}>
-                                    {filtered.length===0&&<div style={{padding:"8px 10px",fontSize:10.5,color:"#94a3b8"}}>No match</div>}
-                                    {lvOrder.map(lv=>{
-                                      const lvNames=filtered.filter(n=>levelMap[n]===lv);
-                                      if(!lvNames.length)return null;
-                                      return(
-                                        <div key={lv}>
-                                          <div style={{padding:"3px 8px",fontSize:8.5,fontWeight:700,color:"#94a3b8",
-                                            background:"#f8fafc",textTransform:"uppercase",letterSpacing:"0.06em",
-                                            borderBottom:"1px solid #f1f5f9"}}>{lv}</div>
-                                          {lvNames.map(name=>(
-                                            <div key={name}
-                                              onClick={()=>handleAddToSlot(name,row.date,s)}
-                                              style={{padding:"5px 10px",fontSize:11,fontWeight:500,color:"#1e293b",
-                                                cursor:"pointer",borderBottom:"1px solid #f8fafc",display:"flex",
-                                                justifyContent:"space-between",alignItems:"center"}}
-                                              onMouseEnter={e=>e.currentTarget.style.background="#f0f9ff"}
-                                              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                                              <span>{name}</span>
-                                              <span style={{fontSize:9,color:"#94a3b8"}}>{rotationMap[name]||""}</span>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              )}
-                            </td>
-                            );
-                          })}
-                      </tr>
-                );
-              })()}
+              {fullView?(
+                weeks.map(({label,dates,rows})=>(
+                  <React.Fragment key={label}>
+                    <tr>
+                      <td colSpan={7} style={{background:"#334155",color:"#94a3b8",fontSize:9.5,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",padding:"4px 10px",borderBottom:"2px solid #94a3b8"}}>
+                        {label} · {dates}
+                      </td>
+                    </tr>
+                    {rows.map((row,ri)=>renderScheduleRow(row,ri===rows.length-1?"3px solid #64748b":"2px solid #94a3b8"))}
+                  </React.Fragment>
+                ))
+              ):(
+                sched.length>0&&renderScheduleRow(sched[dayIdx],"2px solid #94a3b8")
+              )}
             </tbody>
           </table>
         </div>
