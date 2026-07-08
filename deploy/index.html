@@ -1790,18 +1790,6 @@ function MobileDayCard({row, selected, addTarget, setAddTarget, setAddSearch,
     <div style={{background:isWE?"#f0f9ff":"#fff",borderRadius:10,marginBottom:8,
       overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,0.08)",
       border:`1px solid ${isWE?"#bae6fd":"#e2e8f0"}`}}>
-      <div style={{background:isWE?"#0369a1":"#1e293b",color:"#fff",
-        padding:"8px 12px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <span style={{fontWeight:800,fontSize:14}}>{row.day}</span>
-          <span style={{fontSize:12,opacity:0.9}}>{row.date}</span>
-          {isWE&&<span style={{fontSize:10,background:"rgba(255,255,255,0.25)",borderRadius:3,padding:"1px 5px",fontWeight:600}}>WE</span>}
-        </div>
-        <div style={{textAlign:"right",fontSize:11,opacity:0.75}}>
-          <div>{row.greg}</div>
-          <div style={{fontSize:10}}>{row.hijri}</div>
-        </div>
-      </div>
       {slots.map(s=>{
         const isPickerOpen=addTarget?.date===row.date&&addTarget?.slot===s;
         const isTarget=isMoveTarget(s);
@@ -1870,6 +1858,19 @@ function App(){
   const[page,setPage]       =useState("schedule"); // "schedule" | "residents"
   const[addTarget,setAddTarget]=useState(null); // {date,slot} for the resident-picker dropdown
   const[addSearch,setAddSearch]=useState("");
+
+  // Schedule tab is a single-day view (Prev/Next + date dropdown), same as
+  // Subspecialty Consultants: dayIdx defaults to today. sched starts empty
+  // (Firestore hasn't loaded yet) so the default is set the first time it
+  // arrives, not via useState's initializer.
+  const[dayIdx,setDayIdx]=useState(0);
+  const dayIdxInitRef=React.useRef(false);
+  useEffect(()=>{
+    if(dayIdxInitRef.current||sched.length===0)return;
+    dayIdxInitRef.current=true;
+    const idx=sched.findIndex(r=>r.date===todayDateLabel());
+    setDayIdx(idx>=0?idx:0);
+  },[sched]);
 
   // ── Firebase Auth: isAdmin gates every edit affordance in the UI. Real
   // enforcement lives in firestore.rules (admin custom claim required for
@@ -2135,13 +2136,6 @@ function App(){
     return()=>window.removeEventListener('resize',fn);
   },[]);
 
-  const weeks=[
-    {label:"W1",dates:"Jul 5–11",rows:sched.slice(0,7)},
-    {label:"W2",dates:"Jul 12–18",rows:sched.slice(7,14)},
-    {label:"W3",dates:"Jul 19–25",rows:sched.slice(14,21)},
-    {label:"W4",dates:"Jul 26–Aug 1",rows:sched.slice(21,28)},
-  ];
-
   return(
     <div onClick={()=>{if(selected)setSelected(null);if(addTarget)setAddTarget(null);}}
       style={{fontFamily:"'Inter',system-ui,sans-serif",background:"#f8fafc",minHeight:"100vh",padding:12}}>
@@ -2287,14 +2281,47 @@ function App(){
 
         /* ══ MOBILE LAYOUT ══ */
         <div style={{paddingBottom:70}}>
-          {sched.map((row)=>(
-            <MobileDayCard key={row.date} row={row}
-              selected={selected} addTarget={addTarget}
-              setAddTarget={setAddTarget} setAddSearch={setAddSearch}
-              handleCellClick={handleCellClick}
-              handleBadgeClick={handleBadgeClick}
-              getBadgeStyle={getBadgeStyle} isAdmin={isAdmin}/>
-          ))}
+          {sched.length>0&&(()=>{
+            const row=sched[dayIdx];
+            const isWE=row.type==="WE";
+            const isToday=row.date===todayDateLabel();
+            return(
+              <React.Fragment>
+                {/* Day navigator: Prev / current day + jump-to-date / Next -- same pattern as Subspecialty Consultants */}
+                <div onClick={e=>e.stopPropagation()} style={{background:isToday?"#b45309":isWE?"#0369a1":"#1e293b",borderRadius:10,
+                  padding:"10px 12px",marginBottom:10,display:"flex",alignItems:"center",gap:8,color:"#fff"}}>
+                  <button onClick={()=>setDayIdx(i=>Math.max(0,i-1))} disabled={dayIdx===0} title="Previous day"
+                    style={{minWidth:44,minHeight:44,fontSize:20,fontWeight:800,borderRadius:8,border:"none",
+                      background:"rgba(255,255,255,0.15)",color:"#fff",cursor:dayIdx===0?"default":"pointer",opacity:dayIdx===0?0.4:1}}>
+                    ‹
+                  </button>
+                  <div style={{flex:1,textAlign:"center",minWidth:0}}>
+                    <div style={{fontSize:16,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",gap:6,flexWrap:"wrap"}}>
+                      {row.day}, {row.date}
+                      {isToday&&<span style={{fontSize:10,background:"rgba(255,255,255,0.3)",borderRadius:3,padding:"1px 6px",fontWeight:800}}>TODAY</span>}
+                      {isWE&&!isToday&&<span style={{fontSize:10,background:"rgba(255,255,255,0.25)",borderRadius:3,padding:"1px 6px",fontWeight:700}}>WEEKEND</span>}
+                    </div>
+                    <div style={{fontSize:11,opacity:0.8,marginTop:2}}>{row.greg} · {row.hijri}</div>
+                    <select value={row.date} onChange={e=>{const idx=sched.findIndex(r=>r.date===e.target.value); if(idx>=0)setDayIdx(idx);}}
+                      style={{marginTop:6,fontSize:12.5,padding:"6px 8px",borderRadius:6,border:"none",cursor:"pointer",minHeight:36,maxWidth:"100%"}}>
+                      {sched.map(r=><option key={r.date} value={r.date}>{r.day}, {r.date}</option>)}
+                    </select>
+                  </div>
+                  <button onClick={()=>setDayIdx(i=>Math.min(sched.length-1,i+1))} disabled={dayIdx===sched.length-1} title="Next day"
+                    style={{minWidth:44,minHeight:44,fontSize:20,fontWeight:800,borderRadius:8,border:"none",
+                      background:"rgba(255,255,255,0.15)",color:"#fff",cursor:dayIdx===sched.length-1?"default":"pointer",opacity:dayIdx===sched.length-1?0.4:1}}>
+                    ›
+                  </button>
+                </div>
+                <MobileDayCard row={row}
+                  selected={selected} addTarget={addTarget}
+                  setAddTarget={setAddTarget} setAddSearch={setAddSearch}
+                  handleCellClick={handleCellClick}
+                  handleBadgeClick={handleBadgeClick}
+                  getBadgeStyle={getBadgeStyle} isAdmin={isAdmin}/>
+              </React.Fragment>
+            );
+          })()}
 
           {/* Mobile add-resident bottom sheet */}
           {addTarget&&(
@@ -2454,6 +2481,39 @@ function App(){
 
       ):(
         <React.Fragment>
+        {/* Day navigator: Prev / current day + jump-to-date / Next -- same pattern as Subspecialty Consultants */}
+        {sched.length>0&&(()=>{
+          const row=sched[dayIdx];
+          const isWE=row.type==="WE";
+          const isToday=row.date===todayDateLabel();
+          return(
+            <div onClick={e=>e.stopPropagation()} style={{background:isToday?"#b45309":isWE?"#0369a1":"#1e293b",borderRadius:10,
+              padding:"10px 12px",marginBottom:8,display:"flex",alignItems:"center",gap:8,color:"#fff"}}>
+              <button onClick={()=>setDayIdx(i=>Math.max(0,i-1))} disabled={dayIdx===0} title="Previous day"
+                style={{minWidth:44,minHeight:44,fontSize:20,fontWeight:800,borderRadius:8,border:"none",
+                  background:"rgba(255,255,255,0.15)",color:"#fff",cursor:dayIdx===0?"default":"pointer",opacity:dayIdx===0?0.4:1}}>
+                ‹
+              </button>
+              <div style={{flex:1,textAlign:"center",minWidth:0}}>
+                <div style={{fontSize:16,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",gap:6,flexWrap:"wrap"}}>
+                  {row.day}, {row.date}
+                  {isToday&&<span style={{fontSize:10,background:"rgba(255,255,255,0.3)",borderRadius:3,padding:"1px 6px",fontWeight:800}}>TODAY</span>}
+                  {isWE&&!isToday&&<span style={{fontSize:10,background:"rgba(255,255,255,0.25)",borderRadius:3,padding:"1px 6px",fontWeight:700}}>WEEKEND</span>}
+                </div>
+                <div style={{fontSize:11,opacity:0.8,marginTop:2}}>{row.greg} · {row.hijri}</div>
+              </div>
+              <select value={row.date} onChange={e=>{const idx=sched.findIndex(r=>r.date===e.target.value); if(idx>=0)setDayIdx(idx);}}
+                style={{fontSize:12.5,padding:"6px 8px",borderRadius:6,border:"none",cursor:"pointer",minHeight:36,maxWidth:160}}>
+                {sched.map(r=><option key={r.date} value={r.date}>{r.day}, {r.date}</option>)}
+              </select>
+              <button onClick={()=>setDayIdx(i=>Math.min(sched.length-1,i+1))} disabled={dayIdx===sched.length-1} title="Next day"
+                style={{minWidth:44,minHeight:44,fontSize:20,fontWeight:800,borderRadius:8,border:"none",
+                  background:"rgba(255,255,255,0.15)",color:"#fff",cursor:dayIdx===sched.length-1?"default":"pointer",opacity:dayIdx===sched.length-1?0.4:1}}>
+                ›
+              </button>
+            </div>
+          );
+        })()}
         <div style={{display:"flex",gap:8,alignItems:"flex-start"}}>
 
         {/* ── Resident Tracker — always visible left sidebar ── */}
@@ -2500,23 +2560,18 @@ function App(){
               </tr>
             </thead>
             <tbody>
-              {weeks.map(({label,dates,rows})=>(
-                <>
-                  <tr key={label}>
-                    <td colSpan={9} style={{background:"#334155",color:"#94a3b8",fontSize:9.5,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",padding:"4px 10px",borderBottom:"2px solid #94a3b8"}}>
-                      {label} · {dates}
-                    </td>
-                  </tr>
-                  {rows.map((row,ri)=>{
-                    const isWE=row.type==="WE";
-                    const isLastInWeek=ri===rows.length-1;
-                    const bb=isLastInWeek?"3px solid #64748b":"2px solid #94a3b8";
-                    return(
+              {sched.length>0&&(()=>{
+                const row=sched[dayIdx];
+                const isWE=row.type==="WE";
+                const isToday=row.date===todayDateLabel();
+                const bb="2px solid #94a3b8";
+                return(
                       <tr key={row.date} style={{borderBottom:bb}}>
-                          <td style={{padding:"5px 8px",fontWeight:700,fontSize:11,color:isWE?"#0369a1":"#1e293b",
+                          <td style={{padding:"5px 8px",fontWeight:700,fontSize:11,color:isToday?"#b45309":isWE?"#0369a1":"#1e293b",
                             borderRight:"1px solid #d1d5db",borderBottom:bb,
-                            background:isWE?"#e0f2fe":"#f8fafc",position:"sticky",left:0,zIndex:1,whiteSpace:"nowrap"}}>
-                            {row.day}{isWE&&<div style={{fontSize:7.5,fontWeight:500,color:"#0284c7",lineHeight:1}}>WE</div>}
+                            background:isToday?"#fef3c7":isWE?"#e0f2fe":"#f8fafc",position:"sticky",left:0,zIndex:1,whiteSpace:"nowrap"}}>
+                            {row.day}{isToday&&<div style={{fontSize:7.5,fontWeight:700,color:"#b45309",lineHeight:1}}>TODAY</div>}
+                            {!isToday&&isWE&&<div style={{fontSize:7.5,fontWeight:500,color:"#0284c7",lineHeight:1}}>WE</div>}
                           </td>
                           <td style={{padding:"5px 6px",textAlign:"center",fontWeight:600,fontSize:11,color:"#374151",
                             background:isWE?"#f0f9ff":"#fff",borderRight:"1px solid #d1d5db",borderBottom:bb,
@@ -2680,10 +2735,8 @@ function App(){
                             );
                           })}
                       </tr>
-                    );
-                  })}
-                </>
-              ))}
+                );
+              })()}
             </tbody>
           </table>
         </div>
