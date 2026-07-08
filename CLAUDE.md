@@ -35,10 +35,17 @@ The app auto-detects `localhost`/`127.0.0.1` and points at the emulators (ports 
 | `app/block11_template.docx` | Original blank Word template used by the export function as a fill-in base. |
 | `block 11.docx` | The original template in the project root (same file, copied to app/). |
 | `app/src/App.jsx` + `app/src/main.jsx` | Vite entry points (installed but not currently used — Python server is active). |
+| `deploy/index.html` | **What production (GitHub Pages) actually serves** — a separate copy of `app/index.html`, not a build artifact. Must be kept in sync manually; see "Deploying to production" below. |
 
 **When editing logic**: change `block11_schedule.jsx`, then mirror the same change into `app/index.html` (replacing `import { useState } from "react"` → `const { useState } = React;` and removing `export default`).
 
 **Known divergence**: `app/index.html` has drifted ahead of `block11_schedule.jsx` in *data* (not just logic) — it has its own hand-curated `MASTER_ROTA` (full 13-block rotation per resident), `BLOCK_VACATIONS`, `BLOCK_DATES`, a whole Master Rota browsing page, and `DC_NICU`/`DC_PMW` day-coverage call slots that the jsx doesn't have at all. Treat `app/index.html` as the more current data source until this is reconciled back into the jsx.
+
+## Deploying to production
+
+Production is GitHub Pages, deployed by `.github/workflows/deploy-pages.yml` from the **`deploy/`** folder — not `app/`. Critically, that workflow only triggers `on: push` with `paths: ['deploy/**', ...]`, so **a commit that only touches `app/index.html` (or `block11_schedule.jsx`) does not deploy, silently.** There's no error, no failed check — the workflow simply never runs, and production keeps serving the old build.
+
+After changing `app/index.html`, copy it over `deploy/index.html` (`cp app/index.html deploy/index.html`), commit, and push to `main` before considering the change shipped. Verify a deploy actually happened by checking that the latest "Deploy to GitHub Pages" run's commit SHA matches your push (`https://github.com/hassanalsaif/qhn-block11-schedule/actions`), not just that `git push` succeeded.
 
 ## Architecture
 
