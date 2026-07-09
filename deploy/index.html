@@ -972,10 +972,18 @@ function MasterRotaPage(){
     R2:{bg:"#fef3c7",tx:"#78350f"},R1:{bg:"#f3e8ff",tx:"#581c87"},
   };
 
+  // MASTER_ROTA is Firestore-derived now, so its order is whatever the
+  // collection happens to return (not the hand-curated R4->R3->R2->R1 blocks
+  // the old embedded DEFAULT_MASTER_ROTA had) -- sort by level so the default
+  // view (and the row-grouping/header logic below, which relies on the array
+  // already being level-grouped) both work regardless of Firestore's order.
+  const lvSortOrder=["R4","R3","R2","R1"];
+  const byLevel=[...MASTER_ROTA].sort((a,b)=>lvSortOrder.indexOf(a.lv)-lvSortOrder.indexOf(b.lv));
+
   const q=search.trim().toLowerCase();
   const filtered=q
-    ?MASTER_ROTA.filter(r=>r.full.toLowerCase().includes(q)||r.name.toLowerCase().includes(q)||r.lv.toLowerCase()===q||r.b.some(x=>x.toLowerCase().includes(q)))
-    :MASTER_ROTA;
+    ?byLevel.filter(r=>r.full.toLowerCase().includes(q)||r.name.toLowerCase().includes(q)||r.lv.toLowerCase()===q||r.b.some(x=>x.toLowerCase().includes(q)))
+    :byLevel;
 
   // per-block availability summary (not on full V, not excl11 for B11)
   const blockSummary=BLOCK_DATES.map((_,bi)=>{
