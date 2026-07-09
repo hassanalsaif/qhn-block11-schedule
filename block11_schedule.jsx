@@ -1010,7 +1010,7 @@ export default function App(){
 
         {/* ── Page tabs ── */}
         <div style={{display:"flex",gap:0,marginBottom:10,borderBottom:"2px solid #e2e8f0",
-          overflowX:"auto",flexWrap:"nowrap",maxWidth:"100%",WebkitOverflowScrolling:"touch"}}>
+          overflowX:"auto",overflowY:"hidden",flexWrap:"nowrap",maxWidth:"100%",WebkitOverflowScrolling:"touch",touchAction:"pan-x"}}>
           {[["schedule","📅 Schedule"],["residents","👤 Residents"]].map(([p,label])=>(
             <button key={p} onClick={()=>setPage(p)} style={{
               padding:"6px 18px",fontSize:12,fontWeight:700,cursor:"pointer",border:"none",
