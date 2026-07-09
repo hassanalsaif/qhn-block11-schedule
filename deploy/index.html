@@ -952,65 +952,6 @@ const DEFAULT_MASTER_ROTA=[
 ];
 let MASTER_ROTA = DEFAULT_MASTER_ROTA;
 
-// ── TEMPORARY, admin-only, one-time production seed for the resident database ──
-// Phone numbers matched by hand from the staff directory CSV (full name) against
-// MASTER_ROTA's `full` field -- the CSV's own name spellings/spacing vary slightly
-// (e.g. "Moh'md" vs "Mohammed", a stray leading space, "Al" glued onto a surname)
-// but every match below was verified by surname. Two residents have no CSV row:
-// Entisar Alawami (absent from the directory export entirely) -- phone:null.
-// Z.Alwan is a spelling-variant match ("Zahra Alalwan" here vs the CSV's "Zahra Alalwa").
-// Every other field is pulled live from the existing DEFAULT_* constants above, not
-// re-transcribed, so this only adds the one genuinely new fact (phone) per resident.
-// Delete this constant + the seed button/handler in the very next commit after
-// running it once against production -- same lifecycle as the schedule and
-// consultant-schedules one-time imports (commits 6ba5fcd/26acd07, 9e950e7).
-//
-// excludedFromBlock11 -- derived from presence in DEFAULT_rotationMap, NOT just
-// MASTER_ROTA's `excl11` flag. Verified against the emulator: only 2 residents
-// (Maab, A.Marzooq) carry excl11:true, but 11 MORE Master Rota residents (Dana,
-// Hanan, Rawan, Jenan, Z.Abass, Z.Khowaildi, Erum, Safa, H.Salman, Z.Alsaleh,
-// Entisar) are ALSO absent from today's rotationMap -- they're on Elective/ER/
-// Vacation/PHC rotations this block, which simply don't take pediatric ward
-// on-call. Keying off actual DEFAULT_rotationMap membership (the real source of
-// truth for "who's on the Block 11 on-call roster") instead of the flag keeps
-// today's active-scheduling roster byte-identical after seeding.
-const PHONE_BY_NAME = {
-  "M.Khadhrawi":"+966 50 533 0321", "Mustafa":"+966 54 623 5131", "Dina":"+966 55 272 5802",
-  "Dana":"+966 54 453 7779", "Hanan":"+966 56 593 5456", "A.Musalllam":"+966 54 303 1029",
-  "Rawan":"+966 56 617 0220", "A.Qassab":"+966 54 518 1997", "Jenan":"+966 56 411 1535",
-  "Arwa":"+966 59 707 0501", "F.Saffar":"+966 50 902 0849", "Z.Abass":"+966 54 328 9547",
-  "H.Saif":"+966 54 046 6029", "H.Amrad":"+966 55 664 3339", "Reem":"+966 55 147 0960",
-  "Safia":"+966 55 141 3005", "Z.Khowaildi":"+966 56 514 3447", "H.Jalood":"+966 54 335 1623",
-  "Z.Sairafi":"+966 50 224 3789", "Erum":"+966 56 646 1392", "Sara":"+966 55 580 5645",
-  "A.Ibrahim":"0540239755", "H.Albaiek":"+966 54 024 8800",
-  "Safa":"+966 54 451 8585", "Abdulla":"+966 53 902 2034", "Qasim":"+966 56 890 6182",
-  "Wasayif":"+966 54 349 8801", "Shahad":"+966 54 345 9093", "Maab":"+966 50 833 0987",
-  "Sajad":"+966 56 489 5091", "A.Rashid":"+966 57 649 1089", "A.Marzooq":"+966 54 775 1474",
-  "A.Darora":"+966 54 044 9971", "H.Salman":"+966 58 337 1799", "Yasir":"+966 50 853 6880",
-  "A.Dayin":"0581747144", "A.Basarah":"0545786418", "Anwar":"0563711099", "M.Hajji":"0583330596",
-  "F.Ghanim":"0546418817", "Sajidah":"0562801918", "S.Zaidani":"0595042243", "Z.Alwan":"0573871315",
-  "Z.Madan":"0568141403", "Z.Madeh":"0539041551", "Z.Alsaleh":"0549727944", "Z.Aman":"0503193826",
-  "Entisar":null, "Z.Abdulmohsen":"0544029930",
-};
-window.SEED_residents = DEFAULT_MASTER_ROTA.map(r=>{
-  const profile=DEFAULT_residentProfiles.find(p=>p.name===r.name)||{};
-  return{
-    id:r.name,
-    full:r.full,
-    level:r.lv,
-    type:"QCH",
-    rotation:DEFAULT_rotationMap[r.name]||null,
-    phone:PHONE_BY_NAME[r.name]||null,
-    email:null,
-    vacationWeeks:DEFAULT_vacationWeeks[r.name]||[],
-    unwantedDays:DEFAULT_unwantedDays[r.name]||[],
-    masterRota:r.b,
-    excludedFromBlock11:!(r.name in DEFAULT_rotationMap),
-    constraints:profile.constraints||[],
-    notes:profile.notes||"",
-  };
-});
-
 function MasterRotaPage(){
   const[search,setSearch]=useState("");
   const[selectedBlock,setSelectedBlock]=useState(11);
@@ -2280,32 +2221,6 @@ function App(){
     ...patch, updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
     updatedBy:firebase.auth().currentUser?.uid||null,
   },{merge:true});
-  // ── TEMPORARY, admin-only, one-time production seed ──
-  // Batch-writes window.SEED_residents (built from DEFAULT_* + PHONE_BY_NAME
-  // above) into the `residents` collection once. Delete this handler + its
-  // button in the very next commit after running it once against production.
-  const[seedMsg,setSeedMsg]=useState("");
-  const handleSeedResidents=async()=>{
-    if(!isAdmin)return;
-    if(!window.confirm(`This creates ${window.SEED_residents.length} resident documents in Firestore. Run this only once, during initial setup. Continue?`))return;
-    setSeedMsg("Seeding…");
-    try{
-      const batch=firebase.firestore().batch();
-      window.SEED_residents.forEach(r=>{
-        const{id,...data}=r;
-        batch.set(firebase.firestore().collection('residents').doc(id),{
-          ...data, updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
-          updatedBy:firebase.auth().currentUser?.uid||null,
-        });
-      });
-      await batch.commit();
-      setSeedMsg("Seeded ✓");
-    }catch(e){
-      setSeedMsg("Failed: "+(e.message||e));
-    }
-    setTimeout(()=>setSeedMsg(""),5000);
-  };
-
   // ── Is a resident highlighted by the active filter or spotlight? ──
   const isHighlighted = name => {
     if(spotlight && name!==spotlight) return false;
@@ -2711,11 +2626,6 @@ function App(){
               {isAdmin&&<button onClick={undo} disabled={!history.length} style={{padding:"2px 9px",borderRadius:4,fontSize:11,fontWeight:600,cursor:history.length?"pointer":"default",background:history.length?"#fffbeb":"#f9fafb",color:history.length?"#92400e":"#9ca3af",border:`1px solid ${history.length?"#fcd34d":"#e5e7eb"}`}}>↩ Undo{history.length?` (${history.length})`:""}</button>}
               {isAdmin&&<button onClick={reset} style={{padding:"2px 9px",borderRadius:4,fontSize:11,fontWeight:600,cursor:"pointer",background:"#fef2f2",color:"#991b1b",border:"1px solid #fca5a5"}}>↺ Reset</button>}
               {isAdmin&&<button onClick={recommendDayCalls} title="Auto-fill empty day call slots" style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"#b45309",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4}}><span>✦</span> Recommend Day Calls</button>}
-              {isAdmin&&page==="residents"&&Object.keys(residents).length===0&&(
-                <button onClick={handleSeedResidents} title="One-time: populate the resident database in Firestore" style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"#6d28d9",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4}}>
-                  <span>🗄️</span> {seedMsg||"Import Residents to Firestore"}
-                </button>
-              )}
               <button onClick={handleExport} disabled={exporting} style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:exporting?"default":"pointer",background:exporting?"#94a3b8":"#1e3a5f",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4}}>
                 {exporting?<><span>⏳</span> Generating…</>:<><span>📄</span> Export DOCX</>}
               </button>
