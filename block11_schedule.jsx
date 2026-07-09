@@ -1009,12 +1009,14 @@ export default function App(){
           boxShadow:"0 1px 4px rgba(0,0,0,0.08)",border:"1px solid #e2e8f0"}}>
 
         {/* ── Page tabs ── */}
-        <div style={{display:"flex",gap:0,marginBottom:10,borderBottom:"2px solid #e2e8f0"}}>
+        <div style={{display:"flex",gap:0,marginBottom:10,borderBottom:"2px solid #e2e8f0",
+          overflowX:"auto",flexWrap:"nowrap",maxWidth:"100%",WebkitOverflowScrolling:"touch"}}>
           {[["schedule","📅 Schedule"],["residents","👤 Residents"]].map(([p,label])=>(
             <button key={p} onClick={()=>setPage(p)} style={{
               padding:"6px 18px",fontSize:12,fontWeight:700,cursor:"pointer",border:"none",
               background:"none",borderBottom:`3px solid ${page===p?"#1e3a5f":"transparent"}`,
               color:page===p?"#1e3a5f":"#64748b",marginBottom:-2,transition:"all 0.15s",
+              whiteSpace:"nowrap",flexShrink:0,
             }}>{label}</button>
           ))}
         </div>
@@ -1189,7 +1191,7 @@ export default function App(){
           />
         )}
 
-        <div style={{flex:1,overflowX:"auto",borderRadius:8,boxShadow:"0 1px 4px rgba(0,0,0,0.1)",border:"1px solid #94a3b8"}}>
+        <div style={{flex:1,minWidth:0,overflowX:"auto",borderRadius:8,boxShadow:"0 1px 4px rgba(0,0,0,0.1)",border:"1px solid #94a3b8"}}>
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:11.5}}>
             <thead>
               <tr>
