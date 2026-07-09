@@ -952,6 +952,33 @@ const DEFAULT_MASTER_ROTA=[
 ];
 let MASTER_ROTA = DEFAULT_MASTER_ROTA;
 
+// ── TEMPORARY, admin-only, one-time production seed for External Rotators ──
+// Migrates the 4 External Rotators (level:"EXT") into the `residents`
+// collection, same shape as the Master Rota residents' migration. Phone/email
+// extracted from each resident's existing DEFAULT_residentProfiles `notes`
+// field (the only place this data lived before); `notes` below keeps just the
+// descriptive text, since phone/email are now their own fields. No `full`
+// name is available anywhere in the codebase for these 4 -- left null rather
+// than guessed. `masterRota:null` since External Rotators were never part of
+// the 13-block long-term rotation; `excludedFromBlock11:false` since all 4
+// are actively on this block's on-call schedule (rotationMap has them today).
+// Delete this constant + the seed button/handler in the very next commit
+// after running it once against production -- same lifecycle as the Master
+// Rota residents' migration (commits 904e07f/7e88f9d).
+window.SEED_externalRotators = [
+  {id:"Musawi",     level:"EXT",type:"external",rotation:"PEM",    phone:"0542411366",     email:null,
+    notes:"External sub-rotator (PEM)."},
+  {id:"Malak",      level:"EXT",type:"external",rotation:"RHEUMA", phone:"500585655",      email:"malakayed1@outlook.com",
+    notes:"External R4 sub-rotator (Rheumatology)."},
+  {id:"F.Hamood",   level:"EXT",type:"external",rotation:"GP",     phone:"0583203530",     email:null,
+    notes:"External FM R1 sub-rotator."},
+  {id:"O.Alsaihati", level:"EXT",type:"external",rotation:"GP",    phone:"0562419342",     email:null,
+    notes:"External FM R1 sub-rotator."},
+].map(r=>({
+  ...r, full:null, vacationWeeks:[], unwantedDays:[], masterRota:null,
+  excludedFromBlock11:false, constraints:[],
+}));
+
 function MasterRotaPage(){
   const[search,setSearch]=useState("");
   const[selectedBlock,setSelectedBlock]=useState(11);
@@ -2161,12 +2188,15 @@ function App(){
   // per resident, doc ID = the existing short name). A single listener
   // rebuilds the six legacy module-level bindings (rotationMap/levelMap/
   // vacationWeeks/unwantedDays/residentProfiles/MASTER_ROTA) from the live
-  // documents on every change, merged with the still-legacy EXT entries
-  // (External Rotators aren't part of this collection yet -- their own
-  // migration comes later) -- so every existing consumer of those bindings
-  // (pickers, filter groups, Daytime Coverage, checkWarnings, exportDocx,
-  // MasterRotaPage) needs zero changes. Only the Residents tab reads the raw
-  // `residents` state directly, for phone/master-rota/inline-edit.
+  // documents on every change, falling back to the embedded DEFAULT_* EXT
+  // entries only for any External Rotator not yet migrated into this
+  // collection (so partial rollouts never make a resident vanish) -- so
+  // every existing consumer of those bindings (pickers, filter groups,
+  // Daytime Coverage, checkWarnings, exportDocx, MasterRotaPage) needs zero
+  // changes. Only the Residents tab reads the raw `residents` state
+  // directly, for phone/master-rota/inline-edit. External Rotators have no
+  // `masterRota` (they aren't part of the 13-block long-term rotation), so
+  // they're filtered out of the MASTER_ROTA rebuild below -- same as today.
   // `excludedFromBlock11` marks residents whose current-block rotation
   // (Elective/ER/Vacation/PHC/etc.) doesn't take pediatric ward on-call --
   // Maab and A.Marzooq (long-term MASTER_ROTA's `excl11` flag) plus 11 more
@@ -2208,9 +2238,15 @@ function App(){
             leaveBlock11:d.leaveBlock11||"None", constraints:d.constraints||[], notes:d.notes||"",
             phone:d.phone||null, email:d.email||null, excludedFromBlock11:!!d.excludedFromBlock11,
           })),
-          ...DEFAULT_residentProfiles.filter(p=>p.level==="EXT").map(p=>({...p, type:"external"})),
+          // Only fall back to the embedded EXT entries for names NOT YET migrated
+          // to Firestore -- otherwise an EXT resident who's already in `live`
+          // would render twice (once from Firestore, once from this fallback).
+          ...DEFAULT_residentProfiles.filter(p=>p.level==="EXT"&&!live[p.name]).map(p=>({...p, type:"external"})),
         ];
-        MASTER_ROTA=Object.entries(live).map(([id,d])=>({
+        // Filter out docs with no masterRota (External Rotators aren't part of
+        // the 13-block long-term rotation, so they never appear here -- same as
+        // today, where MASTER_ROTA has never included EXT residents).
+        MASTER_ROTA=Object.entries(live).filter(([,d])=>d.masterRota).map(([id,d])=>({
           name:id, full:d.full, lv:d.level, b:d.masterRota, ...(d.excludedFromBlock11?{excl11:true}:{}),
         }));
       }
@@ -2221,6 +2257,31 @@ function App(){
     ...patch, updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
     updatedBy:firebase.auth().currentUser?.uid||null,
   },{merge:true});
+  // ── TEMPORARY, admin-only, one-time production seed ──
+  // Batch-writes window.SEED_externalRotators (the 4 EXT residents) into the
+  // `residents` collection once. Delete this handler + its button in the
+  // very next commit after running it once against production.
+  const[seedExtMsg,setSeedExtMsg]=useState("");
+  const handleSeedExternalRotators=async()=>{
+    if(!isAdmin)return;
+    if(!window.confirm(`This creates ${window.SEED_externalRotators.length} resident documents (External Rotators) in Firestore. Run this only once. Continue?`))return;
+    setSeedExtMsg("Seeding…");
+    try{
+      const batch=firebase.firestore().batch();
+      window.SEED_externalRotators.forEach(r=>{
+        const{id,...data}=r;
+        batch.set(firebase.firestore().collection('residents').doc(id),{
+          ...data, updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+          updatedBy:firebase.auth().currentUser?.uid||null,
+        });
+      });
+      await batch.commit();
+      setSeedExtMsg("Seeded ✓");
+    }catch(e){
+      setSeedExtMsg("Failed: "+(e.message||e));
+    }
+    setTimeout(()=>setSeedExtMsg(""),5000);
+  };
   // ── Is a resident highlighted by the active filter or spotlight? ──
   const isHighlighted = name => {
     if(spotlight && name!==spotlight) return false;
@@ -2626,6 +2687,11 @@ function App(){
               {isAdmin&&<button onClick={undo} disabled={!history.length} style={{padding:"2px 9px",borderRadius:4,fontSize:11,fontWeight:600,cursor:history.length?"pointer":"default",background:history.length?"#fffbeb":"#f9fafb",color:history.length?"#92400e":"#9ca3af",border:`1px solid ${history.length?"#fcd34d":"#e5e7eb"}`}}>↩ Undo{history.length?` (${history.length})`:""}</button>}
               {isAdmin&&<button onClick={reset} style={{padding:"2px 9px",borderRadius:4,fontSize:11,fontWeight:600,cursor:"pointer",background:"#fef2f2",color:"#991b1b",border:"1px solid #fca5a5"}}>↺ Reset</button>}
               {isAdmin&&<button onClick={recommendDayCalls} title="Auto-fill empty day call slots" style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"#b45309",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4}}><span>✦</span> Recommend Day Calls</button>}
+              {isAdmin&&page==="residents"&&!residents["Musawi"]&&(
+                <button onClick={handleSeedExternalRotators} title="One-time: populate External Rotators in the resident database" style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"#6d28d9",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4}}>
+                  <span>🗄️</span> {seedExtMsg||"Import External Rotators to Firestore"}
+                </button>
+              )}
               <button onClick={handleExport} disabled={exporting} style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:exporting?"default":"pointer",background:exporting?"#94a3b8":"#1e3a5f",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4}}>
                 {exporting?<><span>⏳</span> Generating…</>:<><span>📄</span> Export DOCX</>}
               </button>
