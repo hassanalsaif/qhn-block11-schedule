@@ -78,20 +78,24 @@ Everything lives in a single React component file (`block11_schedule.jsx`). Key 
 - **Min gap**: 4 days between any two calls for the same resident.
 - **Slot max**: SO=2, NICU=2, PICU=2, PMW=3 per day.
 - **Vacations**: stored per resident as week codes W1–W4 in `vacationWeeks`. Source: `Vacations-schedule,2026 updated.xlsx` (NOT Master Rota /V notations).
-- A. Marzooq is excluded from this block entirely (not in any data).
+- 13 Master Rota residents (Maab, A.Marzooq, Dana, Hanan, Rawan, Jenan, Z.Abass, Z.Khowaildi, Erum, Safa, H.Salman, Z.Alsaleh, Entisar) aren't part of Block 11's active on-call roster at all — their current-block rotation (Elective/ER/Vacation/PHC/etc.) doesn't take pediatric ward on-call, so they're absent from `rotationMap`/`levelMap`/`residentProfiles` and every scheduling picker, but they still appear in the Residents tab (via `residents/{name}`'s `excludedFromBlock11` field) since that tab is a full resident database, not just the active roster.
 
 ## DOCX template structure
 
 `block 11.docx` has 9 grid columns and 30 table rows (2 header + 28 data). The document.xml is minified. Empty data cells end with `</w:pPr></w:p></w:tc>` — the export function injects a `<w:r>` run before `</w:p>` to fill in text.
 
-## Live data (Firestore) — the schedule and Daytime Coverage overrides
+## Live data (Firestore) — the schedule, Daytime Coverage overrides, and resident database
 
-These two are the only genuinely *live, multi-user* pieces of data, and they live in Firestore, not in the file or in localStorage:
+These pieces of data live in Firestore, not in the file or in localStorage:
 
-| Firestore doc | Holds | Written by |
+| Firestore doc/collection | Holds | Written by |
 |---|---|---|
 | `schedules/block11` | `{days: [...28 day objects...], updatedAt, updatedBy}` — the on-call grid | `writeSchedule()` in `app/index.html`, called by every schedule mutator (`handleCellClick`, `handleDelete`, `handleBatchAddDC`, `recommendDayCalls`, `handleAddToSlot`, `undo`, `reset`) |
 | `manualUnavail/block11` | `{overrides: {"date\|name": status}, updatedAt, updatedBy}` — Daytime Coverage tab overrides | `writeManualUnavail()`, called by `handleSetStatus`/`handleClearAllStatus` |
+| `consultantSchedules/block11` | `{values: {"specKey\|date\|colKey": {status,text}}, updatedAt, updatedBy}` — Subspecialty Consultant Schedules cells | `writeConsultantSchedules()`, called by `handleSetConsultantCell` |
+| `residents/{name}` (collection, one doc per resident, doc ID = short name e.g. `residents/M.Khadhrawi`) | `{full, level, type, rotation, phone, email, vacationWeeks, unwantedDays, masterRota, excludedFromBlock11, constraints, notes, updatedAt, updatedBy}` — the resident database shown on the Residents tab | `writeResident(id, patch)` in `app/index.html`, called by the Residents tab's inline admin editing |
+
+**The resident database and the six legacy bindings**: `App()` has a single `onSnapshot` listener on the `residents` collection that rebuilds the six module-level bindings described below (`rotationMap`, `levelMap`, `vacationWeeks`, `unwantedDays`, `residentProfiles`, `MASTER_ROTA`) from the live documents on every change — merged with the still-legacy `DEFAULT_residentProfiles`/`DEFAULT_levelMap`/`DEFAULT_rotationMap` entries for External Rotators (`level:"EXT"`), which aren't in the `residents` collection yet (that's a separate, future migration). This means every existing consumer of those six bindings (add-to-slot pickers, `buildFilterGroups()`, Daytime Coverage's `COVERAGE_TEAMS`, `checkWarnings()`, `exportDocx`'s badge coloring, `MasterRotaPage`) needed zero changes. If the `residents` collection is empty, every binding falls back to its `DEFAULT_*` baseline, so this is safe to deploy well ahead of running the one-time seed. A resident's `excludedFromBlock11:true` flag (see the "Scheduling rules" section above) removes them from `rotationMap`/`levelMap` (so they're not offered for scheduling) but not from `residentProfiles`/`MASTER_ROTA` (so they still show up in the Residents tab and Master Rota page).
 
 **Why**: this replaced a fragile static-file-publish mechanism (bake schedule into the HTML's own `DEFAULT_initialSchedule` constant, git commit + push) that caused repeated "my edit isn't showing up" bugs — every browser's `localStorage` could silently diverge from what was actually published, with no way to reconcile except manually clearing storage. Firestore's `onSnapshot` listeners mean every viewer's screen updates live, the instant an edit is saved — no publish step, no cache, nothing to diverge.
 
@@ -107,7 +111,7 @@ node set-admin-claim.js someone@example.com true somepassword    # create the ac
 node set-admin-claim.js someone@example.com false                # revoke
 ```
 
-**Resident metadata** (`rotationMap`, `levelMap`, `vacationWeeks`, `unwantedDays`, `residentProfiles`, `MASTER_ROTA`, `BLOCK_VACATIONS`, `BLOCK_DATES`) is **not** in Firestore — it's just the embedded `DEFAULT_*` constants in `app/index.html`, edited by hand and shipped via normal git commits. It changes at "new block / new resident roster" cadence, which fits a code-edit workflow fine; there was never a live-sync complaint about it, unlike the schedule.
+**Resident metadata** for the ~49 Master Rota residents (rotation, level, vacation weeks, unwanted days, constraints, notes, phone, Master Rota) lives in the `residents` Firestore collection described above, admin-editable from the Residents tab. External Rotators (`level:"EXT"`, e.g. Malak, Musawi) are **not yet** in that collection — they're still the embedded `DEFAULT_residentProfiles`/`DEFAULT_levelMap`/`DEFAULT_rotationMap` entries, edited by hand and shipped via normal git commits, same as before. `BLOCK_VACATIONS` and `BLOCK_DATES` (the other 12 blocks' data, used only by the Master Rota browsing page) are also still embedded `DEFAULT_*` constants, not Firestore — they change at "new block" cadence, which fits a code-edit workflow fine.
 
 ## Retired: the old Flask/SQLite backend
 

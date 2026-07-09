@@ -173,6 +173,42 @@ let vacationWeeks = DEFAULT_vacationWeeks;
 
 function getWeek(d){if(["Jul 5","Jul 6","Jul 7","Jul 8","Jul 9","Jul 10","Jul 11"].includes(d))return"W1";if(["Jul 12","Jul 13","Jul 14","Jul 15","Jul 16","Jul 17","Jul 18"].includes(d))return"W2";if(["Jul 19","Jul 20","Jul 21","Jul 22","Jul 23","Jul 24","Jul 25"].includes(d))return"W3";return"W4";}
 
+// Single source of truth for the vacation/unwanted-days DISPLAY strings shown
+// on the Residents tab -- both are computed from the structured arrays
+// (vacationWeeks/unwantedDays) rather than hand-typed, since the two used to
+// drift (identical week arrays rendering as "W2–W4" for one resident but
+// "W2+W3+W4" for another).
+function formatVacationWeeks(weeksArr){
+  if(!weeksArr||weeksArr.length===0)return"None";
+  const nums=weeksArr.map(w=>parseInt(w.slice(1),10)).sort((a,b)=>a-b);
+  const parts=[];let start=nums[0],prev=nums[0];
+  for(let i=1;i<=nums.length;i++){
+    const n=nums[i];
+    if(n===prev+1){prev=n;continue;}
+    parts.push(start===prev?`W${start}`:`W${start}–W${prev}`);
+    if(i<nums.length){start=prev=n;}
+  }
+  return parts.join("+");
+}
+function formatUnwantedDays(datesArr){
+  if(!datesArr||datesArr.length===0)return"None";
+  const order=DEFAULT_initialSchedule.map(d=>d.date);
+  const idxs=datesArr.map(d=>order.indexOf(d)).filter(i=>i>=0).sort((a,b)=>a-b);
+  if(idxs.length===0)return"None";
+  const compress=(s,e)=>{
+    const sm=s.split(" ")[0],em=e.split(" ")[0];
+    return s===e?s:sm===em?`${s}–${e.split(" ")[1]}`:`${s}–${e}`;
+  };
+  const parts=[];let start=idxs[0],prev=idxs[0];
+  for(let i=1;i<=idxs.length;i++){
+    const idx=idxs[i];
+    if(idx===prev+1){prev=idx;continue;}
+    parts.push(compress(order[start],order[prev]));
+    if(i<idxs.length){start=prev=idx;}
+  }
+  return parts.join(", ");
+}
+
 const slotMax   = {SO:2,NICU:2,PICU:2,PMW:3};
 const slots     = ["SO","NICU","PICU","PMW"];
 const slotLabel = {SO:"Senior Overall",NICU:"NICU",PICU:"PICU",PMW:"PMW"};
@@ -190,6 +226,29 @@ const rotColors = {
   ID:{bg:"#fef2f2",bd:"#dc2626",tx:"#7f1d1d"},HEMATO:{bg:"#fdf4ff",bd:"#a21caf",tx:"#4a044e"},
   ANEST:{bg:"#f1f5f9",bd:"#64748b",tx:"#1e293b"},RESEARCH:{bg:"#f0fdfa",bd:"#0d9488",tx:"#134e4a"},
 };
+
+// Master Rota rotation-code -> color, shared by MasterRotaPage's 13-block grid
+// and the Residents tab's per-resident Master Rota summary strip.
+function rotStyle(r){
+  if(!r||r==="V")return{bg:"#fef9c3",tx:"#854d0e"};
+  const base=r.replace("/V","").split("/")[0];
+  const m={
+    NICU:{bg:"#dbeafe",tx:"#1e3a8a"},PICU:{bg:"#fce7f3",tx:"#9d174d"},
+    GP:{bg:"#d1fae5",tx:"#065f46"},GI:{bg:"#dcfce7",tx:"#166534"},
+    ER:{bg:"#ffedd5",tx:"#9a3412"},ELECTIVE:{bg:"#f1f5f9",tx:"#64748b"},
+    RESEARCH:{bg:"#f3e8ff",tx:"#6b21a8"},RESEA:{bg:"#f3e8ff",tx:"#6b21a8"},
+    RES:{bg:"#f3e8ff",tx:"#6b21a8"},CARDIO:{bg:"#ffe4e6",tx:"#9f1239"},
+    DEVELOP:{bg:"#e0f2fe",tx:"#0369a1"},DEVLOP:{bg:"#e0f2fe",tx:"#0369a1"},
+    OPD:{bg:"#fef9c3",tx:"#a16207"},ENDO:{bg:"#ede9fe",tx:"#6d28d9"},
+    ID:{bg:"#fef3c7",tx:"#92400e"},HEMATO:{bg:"#fdf2f8",tx:"#9d174d"},
+    NEURO:{bg:"#f0f9ff",tx:"#0369a1"},PULMO:{bg:"#ecfdf5",tx:"#047857"},
+    ALL:{bg:"#f0fdf4",tx:"#166534"},GEN:{bg:"#e0f2fe",tx:"#0c4a6e"},
+    NEPHRO:{bg:"#fdf4ff",tx:"#7e22ce"},RHEUMA:{bg:"#fff1f2",tx:"#be123c"},
+    WBC:{bg:"#f8fafc",tx:"#334155"},PHC:{bg:"#fafaf9",tx:"#57534e"},
+    ANESSIM:{bg:"#f1f5f9",tx:"#374151"},ANES:{bg:"#f1f5f9",tx:"#374151"},
+  };
+  return m[base]||{bg:"#f8fafc",tx:"#475569"};
+}
 
 function deepClone(s){return s.map(r=>({...r,SO:[...r.SO],NICU:[...r.NICU],PICU:[...r.PICU],PMW:[...r.PMW],DC_PMW:[...(r.DC_PMW||[])],DC_NICU:[...(r.DC_NICU||[])]}));}
 
@@ -893,6 +952,65 @@ const DEFAULT_MASTER_ROTA=[
 ];
 let MASTER_ROTA = DEFAULT_MASTER_ROTA;
 
+// ── TEMPORARY, admin-only, one-time production seed for the resident database ──
+// Phone numbers matched by hand from the staff directory CSV (full name) against
+// MASTER_ROTA's `full` field -- the CSV's own name spellings/spacing vary slightly
+// (e.g. "Moh'md" vs "Mohammed", a stray leading space, "Al" glued onto a surname)
+// but every match below was verified by surname. Two residents have no CSV row:
+// Entisar Alawami (absent from the directory export entirely) -- phone:null.
+// Z.Alwan is a spelling-variant match ("Zahra Alalwan" here vs the CSV's "Zahra Alalwa").
+// Every other field is pulled live from the existing DEFAULT_* constants above, not
+// re-transcribed, so this only adds the one genuinely new fact (phone) per resident.
+// Delete this constant + the seed button/handler in the very next commit after
+// running it once against production -- same lifecycle as the schedule and
+// consultant-schedules one-time imports (commits 6ba5fcd/26acd07, 9e950e7).
+//
+// excludedFromBlock11 -- derived from presence in DEFAULT_rotationMap, NOT just
+// MASTER_ROTA's `excl11` flag. Verified against the emulator: only 2 residents
+// (Maab, A.Marzooq) carry excl11:true, but 11 MORE Master Rota residents (Dana,
+// Hanan, Rawan, Jenan, Z.Abass, Z.Khowaildi, Erum, Safa, H.Salman, Z.Alsaleh,
+// Entisar) are ALSO absent from today's rotationMap -- they're on Elective/ER/
+// Vacation/PHC rotations this block, which simply don't take pediatric ward
+// on-call. Keying off actual DEFAULT_rotationMap membership (the real source of
+// truth for "who's on the Block 11 on-call roster") instead of the flag keeps
+// today's active-scheduling roster byte-identical after seeding.
+const PHONE_BY_NAME = {
+  "M.Khadhrawi":"+966 50 533 0321", "Mustafa":"+966 54 623 5131", "Dina":"+966 55 272 5802",
+  "Dana":"+966 54 453 7779", "Hanan":"+966 56 593 5456", "A.Musalllam":"+966 54 303 1029",
+  "Rawan":"+966 56 617 0220", "A.Qassab":"+966 54 518 1997", "Jenan":"+966 56 411 1535",
+  "Arwa":"+966 59 707 0501", "F.Saffar":"+966 50 902 0849", "Z.Abass":"+966 54 328 9547",
+  "H.Saif":"+966 54 046 6029", "H.Amrad":"+966 55 664 3339", "Reem":"+966 55 147 0960",
+  "Safia":"+966 55 141 3005", "Z.Khowaildi":"+966 56 514 3447", "H.Jalood":"+966 54 335 1623",
+  "Z.Sairafi":"+966 50 224 3789", "Erum":"+966 56 646 1392", "Sara":"+966 55 580 5645",
+  "A.Ibrahim":"0540239755", "H.Albaiek":"+966 54 024 8800",
+  "Safa":"+966 54 451 8585", "Abdulla":"+966 53 902 2034", "Qasim":"+966 56 890 6182",
+  "Wasayif":"+966 54 349 8801", "Shahad":"+966 54 345 9093", "Maab":"+966 50 833 0987",
+  "Sajad":"+966 56 489 5091", "A.Rashid":"+966 57 649 1089", "A.Marzooq":"+966 54 775 1474",
+  "A.Darora":"+966 54 044 9971", "H.Salman":"+966 58 337 1799", "Yasir":"+966 50 853 6880",
+  "A.Dayin":"0581747144", "A.Basarah":"0545786418", "Anwar":"0563711099", "M.Hajji":"0583330596",
+  "F.Ghanim":"0546418817", "Sajidah":"0562801918", "S.Zaidani":"0595042243", "Z.Alwan":"0573871315",
+  "Z.Madan":"0568141403", "Z.Madeh":"0539041551", "Z.Alsaleh":"0549727944", "Z.Aman":"0503193826",
+  "Entisar":null, "Z.Abdulmohsen":"0544029930",
+};
+window.SEED_residents = DEFAULT_MASTER_ROTA.map(r=>{
+  const profile=DEFAULT_residentProfiles.find(p=>p.name===r.name)||{};
+  return{
+    id:r.name,
+    full:r.full,
+    level:r.lv,
+    type:"QCH",
+    rotation:DEFAULT_rotationMap[r.name]||null,
+    phone:PHONE_BY_NAME[r.name]||null,
+    email:null,
+    vacationWeeks:DEFAULT_vacationWeeks[r.name]||[],
+    unwantedDays:DEFAULT_unwantedDays[r.name]||[],
+    masterRota:r.b,
+    excludedFromBlock11:!(r.name in DEFAULT_rotationMap),
+    constraints:profile.constraints||[],
+    notes:profile.notes||"",
+  };
+});
+
 function MasterRotaPage(){
   const[search,setSearch]=useState("");
   const[selectedBlock,setSelectedBlock]=useState(11);
@@ -906,27 +1024,6 @@ function MasterRotaPage(){
       const fmt=dt=>`${dt.getDate()} ${mo[dt.getMonth()]}`;
       return{wk,label:`${fmt(s)} – ${fmt(e)}`};
     });
-  }
-
-  function rotStyle(r){
-    if(!r||r==="V")return{bg:"#fef9c3",tx:"#854d0e"};
-    const base=r.replace("/V","").split("/")[0];
-    const m={
-      NICU:{bg:"#dbeafe",tx:"#1e3a8a"},PICU:{bg:"#fce7f3",tx:"#9d174d"},
-      GP:{bg:"#d1fae5",tx:"#065f46"},GI:{bg:"#dcfce7",tx:"#166534"},
-      ER:{bg:"#ffedd5",tx:"#9a3412"},ELECTIVE:{bg:"#f1f5f9",tx:"#64748b"},
-      RESEARCH:{bg:"#f3e8ff",tx:"#6b21a8"},RESEA:{bg:"#f3e8ff",tx:"#6b21a8"},
-      RES:{bg:"#f3e8ff",tx:"#6b21a8"},CARDIO:{bg:"#ffe4e6",tx:"#9f1239"},
-      DEVELOP:{bg:"#e0f2fe",tx:"#0369a1"},DEVLOP:{bg:"#e0f2fe",tx:"#0369a1"},
-      OPD:{bg:"#fef9c3",tx:"#a16207"},ENDO:{bg:"#ede9fe",tx:"#6d28d9"},
-      ID:{bg:"#fef3c7",tx:"#92400e"},HEMATO:{bg:"#fdf2f8",tx:"#9d174d"},
-      NEURO:{bg:"#f0f9ff",tx:"#0369a1"},PULMO:{bg:"#ecfdf5",tx:"#047857"},
-      ALL:{bg:"#f0fdf4",tx:"#166534"},GEN:{bg:"#e0f2fe",tx:"#0c4a6e"},
-      NEPHRO:{bg:"#fdf4ff",tx:"#7e22ce"},RHEUMA:{bg:"#fff1f2",tx:"#be123c"},
-      WBC:{bg:"#f8fafc",tx:"#334155"},PHC:{bg:"#fafaf9",tx:"#57534e"},
-      ANESSIM:{bg:"#f1f5f9",tx:"#374151"},ANES:{bg:"#f1f5f9",tx:"#374151"},
-    };
-    return m[base]||{bg:"#f8fafc",tx:"#475569"};
   }
 
   const lvColors2={
@@ -1221,8 +1318,11 @@ function MasterRotaPage(){
   );
 }
 
-function ResidentsPage({sched}){
+function ResidentsPage({sched,residents,isAdmin,writeResident}){
   const dateIdx={};sched.forEach((r,i)=>{dateIdx[r.date]=i;});
+  const[search,setSearch]=useState("");
+  const[editingName,setEditingName]=useState(null);
+  const[draft,setDraft]=useState(null);
 
   function getCalls(name){
     return sched.flatMap(row=>{
@@ -1235,18 +1335,64 @@ function ResidentsPage({sched}){
     });
   }
 
-  const levels=["R4","R3","R2","R1"];
+  function startEdit(res){
+    const doc=residents[res.name]||{};
+    setEditingName(res.name);
+    setDraft({
+      phone:doc.phone||"",
+      vacationWeeks:new Set(doc.vacationWeeks||[]),
+      unwantedDays:(doc.unwantedDays||[]).join(", "),
+      constraints:(doc.constraints||[]).join("\n"),
+      notes:doc.notes||"",
+    });
+  }
+  function saveEdit(name){
+    writeResident(name,{
+      phone:draft.phone.trim()||null,
+      vacationWeeks:["W1","W2","W3","W4"].filter(w=>draft.vacationWeeks.has(w)),
+      unwantedDays:draft.unwantedDays.split(",").map(s=>s.trim()).filter(Boolean),
+      constraints:draft.constraints.split("\n").map(s=>s.trim()).filter(Boolean),
+      notes:draft.notes.trim(),
+    });
+    setEditingName(null);setDraft(null);
+  }
+
+  const levels=["R4","R3","R2","R1","EXT"];
+  const typePillStyle={QCH:{bg:"#dcfce7",tx:"#166534",label:"QCH Resident"},external:{bg:"#fed7aa",tx:"#9a3412",label:"External Rotator"}};
+
+  const q=search.trim().toLowerCase();
+  const matches=r=>{
+    if(!q)return true;
+    const full=(MASTER_ROTA.find(m=>m.name===r.name)||{}).full||"";
+    return r.name.toLowerCase().includes(q)||full.toLowerCase().includes(q)||(r.rotation||"").toLowerCase().includes(q);
+  };
 
   return(
     <div style={{padding:"0 0 24px"}}>
+      {/* Search */}
+      <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:14,flexWrap:"wrap"}}>
+        <div style={{position:"relative",flex:1,minWidth:200}}>
+          <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:14,color:"#94a3b8"}}>🔍</span>
+          <input placeholder="Search by name, rotation, or level (R3, EXT…)" value={search}
+            onChange={e=>setSearch(e.target.value)}
+            style={{width:"100%",padding:"8px 12px 8px 34px",fontSize:13,borderRadius:7,
+              border:"1.5px solid #cbd5e1",outline:"none",background:"#fff",boxSizing:"border-box"}}/>
+        </div>
+        {search&&<button onClick={()=>setSearch("")}
+          style={{padding:"7px 14px",borderRadius:6,border:"1px solid #cbd5e1",
+            background:"#f1f5f9",color:"#475569",cursor:"pointer",fontSize:12,fontWeight:600}}>✕ Clear</button>}
+      </div>
+
       {levels.map(lvl=>{
-        const group=residentProfiles.filter(r=>r.level===lvl);
+        const group=residentProfiles.filter(r=>r.level===lvl&&matches(r));
+        if(group.length===0)return null;
         const lc=levelColors[lvl];
         return(
           <div key={lvl}>
             <div style={{margin:"20px 0 10px",paddingBottom:4,borderBottom:`3px solid ${lc.hdr}`,display:"flex",alignItems:"center",gap:8}}>
               <span style={{background:lc.hdr,color:"#fff",borderRadius:4,padding:"2px 10px",fontSize:13,fontWeight:800}}>{lvl}</span>
-              <span style={{fontSize:13,fontWeight:700,color:lc.tx}}>Residents</span>
+              <span style={{fontSize:13,fontWeight:700,color:lc.tx}}>{lvl==="EXT"?"External Rotators":"Residents"}</span>
+              <span style={{fontSize:11,color:"#94a3b8"}}>({group.length})</span>
             </div>
 
             {group.map(res=>{
@@ -1259,6 +1405,10 @@ function ResidentsPage({sched}){
               });
               const wdCount=calls.filter(c=>c.type==="WD").length;
               const weCount=calls.filter(c=>c.type==="WE").length;
+              const isFirestoreBacked=!!residents[res.name];
+              const mr=MASTER_ROTA.find(m=>m.name===res.name);
+              const isEditing=editingName===res.name;
+              const tp=typePillStyle[res.type]||typePillStyle.QCH;
 
               return(
                 <div key={res.name} style={{background:"#fff",borderRadius:8,border:`1px solid ${lc.light}`,marginBottom:10,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
@@ -1266,11 +1416,73 @@ function ResidentsPage({sched}){
                   <div style={{background:lc.light,padding:"8px 14px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",borderBottom:`1px solid ${lc.hdr}22`}}>
                     <span style={{fontSize:14,fontWeight:800,color:lc.hdr}}>{res.name}</span>
                     <span style={{fontSize:11,fontWeight:600,color:lc.tx,background:"#fff",borderRadius:3,padding:"1px 7px",border:`1px solid ${lc.hdr}44`}}>{res.level}</span>
-                    <span style={{fontSize:11,fontWeight:600,color:lc.tx,background:"#fff",borderRadius:3,padding:"1px 7px",border:`1px solid ${lc.hdr}44`}}>{res.rotation}</span>
+                    {res.rotation&&<span style={{fontSize:11,fontWeight:600,color:lc.tx,background:"#fff",borderRadius:3,padding:"1px 7px",border:`1px solid ${lc.hdr}44`}}>{res.rotation}</span>}
+                    <span style={{fontSize:10.5,fontWeight:700,color:tp.tx,background:tp.bg,borderRadius:3,padding:"1px 7px"}}>{tp.label}</span>
+                    {res.phone&&<span style={{fontSize:11,fontWeight:600,color:"#334155",background:"#fff",borderRadius:3,padding:"1px 7px",border:"1px solid #cbd5e1"}}>📞 {res.phone}</span>}
+                    {res.email&&<span style={{fontSize:11,fontWeight:600,color:"#334155",background:"#fff",borderRadius:3,padding:"1px 7px",border:"1px solid #cbd5e1"}}>✉️ {res.email}</span>}
+                    {isAdmin&&isFirestoreBacked&&(
+                      <button onClick={()=>isEditing?setEditingName(null):startEdit(res)}
+                        style={{fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:5,cursor:"pointer",
+                          border:`1px solid ${isEditing?"#dc2626":lc.hdr}`,
+                          background:isEditing?"#fef2f2":"#fff",color:isEditing?"#dc2626":lc.hdr}}>
+                        {isEditing?"✕ Cancel":"✏️ Edit"}
+                      </button>
+                    )}
                     <span style={{marginLeft:"auto",fontSize:11,fontWeight:700,color:lc.tx}}>{calls.length} call{calls.length!==1?"s":""} · {wdCount}WD + {weCount}WE</span>
                   </div>
 
                   <div style={{padding:"8px 14px"}}>
+                    {isEditing?(
+                      <div onClick={e=>e.stopPropagation()} style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:6,padding:10,marginBottom:8}}>
+                        <div style={{display:"flex",flexWrap:"wrap",gap:10,marginBottom:8}}>
+                          <label style={{fontSize:11,color:"#475569"}}>
+                            Phone<br/>
+                            <input value={draft.phone} onChange={e=>setDraft({...draft,phone:e.target.value})}
+                              placeholder="+966 5X XXX XXXX"
+                              style={{fontSize:12,padding:"5px 7px",borderRadius:4,border:"1px solid #cbd5e1",width:170}}/>
+                          </label>
+                          <div style={{fontSize:11,color:"#475569"}}>
+                            Vacation weeks<br/>
+                            <div style={{display:"flex",gap:4,marginTop:2}}>
+                              {["W1","W2","W3","W4"].map(w=>{
+                                const on=draft.vacationWeeks.has(w);
+                                return(
+                                  <button key={w} onClick={()=>{
+                                    const next=new Set(draft.vacationWeeks);
+                                    on?next.delete(w):next.add(w);
+                                    setDraft({...draft,vacationWeeks:next});
+                                  }} style={{fontSize:11,fontWeight:700,padding:"4px 9px",borderRadius:4,cursor:"pointer",
+                                    border:`1px solid ${on?"#d97706":"#cbd5e1"}`,
+                                    background:on?"#fef3c7":"#fff",color:on?"#92400e":"#94a3b8"}}>{w}</button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                        <label style={{fontSize:11,color:"#475569",display:"block",marginBottom:8}}>
+                          Unwanted days (comma-separated, e.g. "Jul 31, Aug 1")<br/>
+                          <input value={draft.unwantedDays} onChange={e=>setDraft({...draft,unwantedDays:e.target.value})}
+                            style={{fontSize:12,padding:"5px 7px",borderRadius:4,border:"1px solid #cbd5e1",width:"100%",boxSizing:"border-box"}}/>
+                        </label>
+                        <label style={{fontSize:11,color:"#475569",display:"block",marginBottom:8}}>
+                          Constraints (one per line)<br/>
+                          <textarea value={draft.constraints} onChange={e=>setDraft({...draft,constraints:e.target.value})}
+                            rows={2} style={{fontSize:12,padding:"5px 7px",borderRadius:4,border:"1px solid #cbd5e1",width:"100%",boxSizing:"border-box",resize:"vertical"}}/>
+                        </label>
+                        <label style={{fontSize:11,color:"#475569",display:"block",marginBottom:8}}>
+                          Notes<br/>
+                          <input value={draft.notes} onChange={e=>setDraft({...draft,notes:e.target.value})}
+                            style={{fontSize:12,padding:"5px 7px",borderRadius:4,border:"1px solid #cbd5e1",width:"100%",boxSizing:"border-box"}}/>
+                        </label>
+                        <div style={{display:"flex",gap:6}}>
+                          <button onClick={()=>saveEdit(res.name)}
+                            style={{fontSize:12,fontWeight:700,padding:"6px 14px",borderRadius:5,border:"1px solid #166534",background:"#dcfce7",color:"#166534",cursor:"pointer"}}>💾 Save</button>
+                          <button onClick={()=>{setEditingName(null);setDraft(null);}}
+                            style={{fontSize:12,fontWeight:700,padding:"6px 14px",borderRadius:5,border:"1px solid #cbd5e1",background:"#fff",color:"#64748b",cursor:"pointer"}}>Cancel</button>
+                        </div>
+                      </div>
+                    ):(
+                    <>
                     {/* Info tags */}
                     <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
                       {res.vacation!=="None"&&(
@@ -1290,6 +1502,33 @@ function ResidentsPage({sched}){
                       )}
                     </div>
 
+                    {/* Master Rota summary strip */}
+                    {mr&&(
+                      <div style={{marginBottom:8}}>
+                        <div style={{fontSize:9.5,color:"#94a3b8",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.04em",marginBottom:3}}>Master Rota (13 blocks)</div>
+                        <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
+                          {mr.b.map((rot,bi)=>{
+                            const s=rotStyle(rot);
+                            const isCurr=BLOCK_DATES[bi]&&BLOCK_DATES[bi].current;
+                            return(
+                              <span key={bi} title={BLOCK_DATES[bi]?BLOCK_DATES[bi].label:`B${bi+1}`}
+                                style={{fontSize:9,fontWeight:isCurr?800:600,padding:"2px 5px",borderRadius:3,
+                                  background:rot==="V"?"#fef9c3":s.bg,color:rot==="V"?"#854d0e":s.tx,
+                                  outline:isCurr?"2px solid #3b82f6":"none",outlineOffset:-1}}>
+                                {rot==="V"?"🏖":rot.replace("/V","")}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {res.excludedFromBlock11?(
+                      <div style={{fontSize:11.5,color:"#92400e",background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:4,padding:"6px 10px"}}>
+                        🧭 Not part of the Block 11 on-call schedule{mr?` — currently on ${mr.b[10]}`:""}.
+                      </div>
+                    ):(
+                    <>
                     {/* Calls table */}
                     {calls.length===0?(
                       <div style={{fontSize:11,color:"#9ca3af",fontStyle:"italic"}}>No calls assigned in current schedule.</div>
@@ -1355,6 +1594,10 @@ function ResidentsPage({sched}){
                           </tbody>
                         </table>
                       </div>
+                    )}
+                    </>
+                    )}
+                    </>
                     )}
                   </div>
                 </div>
@@ -1973,11 +2216,95 @@ function App(){
     writeConsultantSchedules(next);
   };
 
-  // Resident metadata (rotations/levels/vacations/profiles/master rota) is
-  // just the embedded DEFAULT_* constants above -- no fetch, no backend.
-  // It changes at "new block / new resident roster" cadence, which fits a
-  // normal code-edit-and-deploy workflow fine. Only the schedule and Daytime
-  // Coverage overrides needed to be live, and those are Firestore-backed now.
+  // Resident database: Firestore-backed (collection `residents`, one document
+  // per resident, doc ID = the existing short name). A single listener
+  // rebuilds the six legacy module-level bindings (rotationMap/levelMap/
+  // vacationWeeks/unwantedDays/residentProfiles/MASTER_ROTA) from the live
+  // documents on every change, merged with the still-legacy EXT entries
+  // (External Rotators aren't part of this collection yet -- their own
+  // migration comes later) -- so every existing consumer of those bindings
+  // (pickers, filter groups, Daytime Coverage, checkWarnings, exportDocx,
+  // MasterRotaPage) needs zero changes. Only the Residents tab reads the raw
+  // `residents` state directly, for phone/master-rota/inline-edit.
+  // `excludedFromBlock11` marks residents whose current-block rotation
+  // (Elective/ER/Vacation/PHC/etc.) doesn't take pediatric ward on-call --
+  // Maab and A.Marzooq (long-term MASTER_ROTA's `excl11` flag) plus 11 more
+  // Master Rota residents who simply aren't in today's DEFAULT_rotationMap
+  // for the same reason. They get real docs (so they show up in the
+  // Residents tab + Master Rota) but are excluded from rotationMap/levelMap
+  // (so pickers/filters/coverage don't offer them for scheduling) -- same
+  // active roster as today, byte-for-byte.
+  // If the collection is still empty (before the one-time seed runs), every
+  // binding stays at its DEFAULT_* baseline -- zero visible change.
+  const[residents,setResidents]=useState({});
+  useEffect(()=>{
+    return firebase.firestore().collection('residents').onSnapshot(snap=>{
+      const live={};
+      snap.forEach(doc=>{ live[doc.id]=doc.data(); });
+      setResidents(live);
+
+      if(Object.keys(live).length===0){
+        rotationMap=DEFAULT_rotationMap; levelMap=DEFAULT_levelMap;
+        vacationWeeks=DEFAULT_vacationWeeks; unwantedDays=DEFAULT_unwantedDays;
+        residentProfiles=DEFAULT_residentProfiles; MASTER_ROTA=DEFAULT_MASTER_ROTA;
+      }else{
+        const extNames=Object.keys(DEFAULT_levelMap).filter(n=>DEFAULT_levelMap[n]==="EXT");
+        const active=Object.entries(live).filter(([,d])=>!d.excludedFromBlock11);
+        rotationMap={
+          ...Object.fromEntries(extNames.map(n=>[n,DEFAULT_rotationMap[n]])),
+          ...Object.fromEntries(active.map(([id,d])=>[id,d.rotation])),
+        };
+        levelMap={
+          ...Object.fromEntries(extNames.map(n=>[n,DEFAULT_levelMap[n]])),
+          ...Object.fromEntries(active.map(([id,d])=>[id,d.level])),
+        };
+        vacationWeeks=Object.fromEntries(Object.entries(live).filter(([,d])=>(d.vacationWeeks||[]).length).map(([id,d])=>[id,d.vacationWeeks]));
+        unwantedDays=Object.fromEntries(Object.entries(live).filter(([,d])=>(d.unwantedDays||[]).length).map(([id,d])=>[id,d.unwantedDays]));
+        residentProfiles=[
+          ...Object.entries(live).map(([id,d])=>({
+            name:id, level:d.level, rotation:d.rotation, type:d.type||"QCH",
+            vacation:formatVacationWeeks(d.vacationWeeks), unwanted:formatUnwantedDays(d.unwantedDays),
+            leaveBlock11:d.leaveBlock11||"None", constraints:d.constraints||[], notes:d.notes||"",
+            phone:d.phone||null, email:d.email||null, excludedFromBlock11:!!d.excludedFromBlock11,
+          })),
+          ...DEFAULT_residentProfiles.filter(p=>p.level==="EXT").map(p=>({...p, type:"external"})),
+        ];
+        MASTER_ROTA=Object.entries(live).map(([id,d])=>({
+          name:id, full:d.full, lv:d.level, b:d.masterRota, ...(d.excludedFromBlock11?{excl11:true}:{}),
+        }));
+      }
+      filterGroups=buildFilterGroups();
+    });
+  },[]);
+  const writeResident=(id,patch)=>firebase.firestore().collection('residents').doc(id).set({
+    ...patch, updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+    updatedBy:firebase.auth().currentUser?.uid||null,
+  },{merge:true});
+  // ── TEMPORARY, admin-only, one-time production seed ──
+  // Batch-writes window.SEED_residents (built from DEFAULT_* + PHONE_BY_NAME
+  // above) into the `residents` collection once. Delete this handler + its
+  // button in the very next commit after running it once against production.
+  const[seedMsg,setSeedMsg]=useState("");
+  const handleSeedResidents=async()=>{
+    if(!isAdmin)return;
+    if(!window.confirm(`This creates ${window.SEED_residents.length} resident documents in Firestore. Run this only once, during initial setup. Continue?`))return;
+    setSeedMsg("Seeding…");
+    try{
+      const batch=firebase.firestore().batch();
+      window.SEED_residents.forEach(r=>{
+        const{id,...data}=r;
+        batch.set(firebase.firestore().collection('residents').doc(id),{
+          ...data, updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+          updatedBy:firebase.auth().currentUser?.uid||null,
+        });
+      });
+      await batch.commit();
+      setSeedMsg("Seeded ✓");
+    }catch(e){
+      setSeedMsg("Failed: "+(e.message||e));
+    }
+    setTimeout(()=>setSeedMsg(""),5000);
+  };
 
   // ── Is a resident highlighted by the active filter or spotlight? ──
   const isHighlighted = name => {
@@ -2384,6 +2711,11 @@ function App(){
               {isAdmin&&<button onClick={undo} disabled={!history.length} style={{padding:"2px 9px",borderRadius:4,fontSize:11,fontWeight:600,cursor:history.length?"pointer":"default",background:history.length?"#fffbeb":"#f9fafb",color:history.length?"#92400e":"#9ca3af",border:`1px solid ${history.length?"#fcd34d":"#e5e7eb"}`}}>↩ Undo{history.length?` (${history.length})`:""}</button>}
               {isAdmin&&<button onClick={reset} style={{padding:"2px 9px",borderRadius:4,fontSize:11,fontWeight:600,cursor:"pointer",background:"#fef2f2",color:"#991b1b",border:"1px solid #fca5a5"}}>↺ Reset</button>}
               {isAdmin&&<button onClick={recommendDayCalls} title="Auto-fill empty day call slots" style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"#b45309",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4}}><span>✦</span> Recommend Day Calls</button>}
+              {isAdmin&&page==="residents"&&Object.keys(residents).length===0&&(
+                <button onClick={handleSeedResidents} title="One-time: populate the resident database in Firestore" style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"#6d28d9",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4}}>
+                  <span>🗄️</span> {seedMsg||"Import Residents to Firestore"}
+                </button>
+              )}
               <button onClick={handleExport} disabled={exporting} style={{padding:"2px 12px",borderRadius:4,fontSize:11,fontWeight:700,cursor:exporting?"default":"pointer",background:exporting?"#94a3b8":"#1e3a5f",color:"#fff",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:4}}>
                 {exporting?<><span>⏳</span> Generating…</>:<><span>📄</span> Export DOCX</>}
               </button>
@@ -2420,7 +2752,7 @@ function App(){
         {/* Instruction */}
         <div style={{marginTop:6,padding:"5px 10px",background:"#f0f9ff",borderRadius:5,fontSize:11,color:"#0369a1",border:"1px solid #bae6fd"}}>
           {page==="residents"
-            ?"👤 Individual resident schedules — vacation, unwanted days, constraints, and call details with gap analysis."
+            ?"👤 Resident database — search by name, rotation, or level. Phone, Master Rota, vacation, unwanted days, constraints, and call details with gap analysis."
             :page==="coverage"
             ?"🩺 Daytime team coverage for every day — who's present vs post-call/on-vacation, by team & level. Use it to pull an available resident into a short team."
             :page==="consultants"
@@ -2458,7 +2790,7 @@ function App(){
       {/* ── PAGE 2: Residents ── */}
       {page==="residents"&&(
         <div onClick={e=>e.stopPropagation()}>
-          <ResidentsPage sched={sched}/>
+          <ResidentsPage sched={sched} residents={residents} isAdmin={isAdmin} writeResident={writeResident}/>
         </div>
       )}
 
