@@ -1,0 +1,14 @@
+{
+  "name": "qhn-block11-whatsapp-bot",
+  "private": true,
+  "description": "WhatsApp Cloud API webhook (Firebase Cloud Function, 2nd gen) for the QHN Block 11 on-call schedule. Residents ask questions; chiefs (role:\"chief\" on residents/{shortName}) can edit the schedule. Reads/writes the same Firestore project as app/index.html.",
+  "main": "index.js",
+  "engines": {
+    "node": "20"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.0",
+    "firebase-admin": "^12.0.0",
+    "firebase-functions": "^5.0.0"
+  }
+}

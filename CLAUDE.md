@@ -32,6 +32,7 @@ The app auto-detects `localhost`/`127.0.0.1` and points at the emulators (ports 
 |---|---|
 | `block11_schedule.jsx` | **Source of truth** — full React app as JSX. Edit this file first. |
 | `app/index.html` | **What the browser serves** — a copy of the JSX embedded inside a `<script type="text/babel">` tag with `import`/`export` lines removed. Must be kept in sync with the JSX manually. |
+| `app/checkWarnings.js` | **Shared scheduling-constraint logic** — `checkWarnings()` + its constant deps (`slots`, `slotMax`, `getWeek`, `noSaturdayRes`, `noMondayRes`, `noSundayRes`, `r1Res`, `nicuUnit`, `picuUnit`). Loaded as a classic `<script>` in `app/index.html` (sets `window.*`) **and** required by the WhatsApp bot (via a generated `.cjs` copy — see the bot section). This is the single source of truth for the rules; both surfaces enforce them identically. See "The shared constraint module" below. |
 | `app/block11_template.docx` | Original blank Word template used by the export function as a fill-in base. |
 | `block 11.docx` | The original template in the project root (same file, copied to app/). |
 | `app/src/App.jsx` + `app/src/main.jsx` | Vite entry points (installed but not currently used — Python server is active). |
@@ -57,7 +58,7 @@ Everything lives in a single React component file (`block11_schedule.jsx`). Key 
 
 3. **Constraint data** — `noSaturdayRes`, `noMondayRes`, `noSundayRes`, `r1Res`, `nicuUnit`, `picuUnit`, `unwantedDays`, `vacationWeeks`. These drive the warnings shown when a resident is moved to an invalid slot.
 
-4. **`checkWarnings(sched, name, toDate, toSlot)`** — Runs all constraint checks and returns an array of warning strings. Called every time a resident is dropped into a new slot.
+4. **`checkWarnings(sched, name, toDate, toSlot)`** — Runs all constraint checks and returns an array of warning strings. Called every time a resident is dropped into a new slot. **Note the divergence:** in `block11_schedule.jsx` this is still an inline function that closes over module-level constraint constants. In `app/index.html` it has been extracted to `app/checkWarnings.js` (loaded as a `<script>`), and its call sites now pass `{rotationMap, vacationWeeks, unwantedDays}` as an explicit 5th `meta` argument instead of closing over globals — because the same function is also required server-side by the WhatsApp bot, where those maps come from a fresh Firestore read rather than a browser-held `let`. See "The shared constraint module" below.
 
 5. **`exportDocx(sched)`** — Fetches `block11_template.docx`, opens it with JSZip (CDN), injects resident names into the correct XML cells, and downloads the filled DOCX. Column mapping:
    - Weekdays (Sun–Thu): col 6=SO, 7=NICU, 8=PICU, 9=PMW
@@ -93,7 +94,9 @@ These pieces of data live in Firestore, not in the file or in localStorage:
 | `schedules/block11` | `{days: [...28 day objects...], updatedAt, updatedBy}` — the on-call grid | `writeSchedule()` in `app/index.html`, called by every schedule mutator (`handleCellClick`, `handleDelete`, `handleBatchAddDC`, `recommendDayCalls`, `handleAddToSlot`, `undo`, `reset`) |
 | `manualUnavail/block11` | `{overrides: {"date\|name": status}, updatedAt, updatedBy}` — Daytime Coverage tab overrides | `writeManualUnavail()`, called by `handleSetStatus`/`handleClearAllStatus` |
 | `consultantSchedules/block11` | `{values: {"specKey\|date\|colKey": {status,text}}, updatedAt, updatedBy}` — Subspecialty Consultant Schedules cells | `writeConsultantSchedules()`, called by `handleSetConsultantCell` |
-| `residents/{name}` (collection, one doc per resident, doc ID = short name e.g. `residents/M.Khadhrawi`) | `{full, level, type, rotation, phone, email, vacationWeeks, unwantedDays, masterRota, excludedFromBlock11, constraints, notes, updatedAt, updatedBy}` — the resident database shown on the Residents tab | `writeResident(id, patch)` in `app/index.html`, called by the Residents tab's inline admin editing |
+| `residents/{name}` (collection, one doc per resident, doc ID = short name e.g. `residents/M.Khadhrawi`) | `{full, level, type, rotation, phone, email, vacationWeeks, unwantedDays, masterRota, excludedFromBlock11, constraints, notes, role, updatedAt, updatedBy}` — the resident database shown on the Residents tab. `role: "resident"\|"chief"` (added for the WhatsApp bot) gates who can edit the schedule from chat. `phone` (already admin-editable on the Residents tab) is how the bot identifies an incoming WhatsApp sender. | `writeResident(id, patch)` in `app/index.html`; `role`/`phone` also backfilled by `scripts/backfill-resident-contacts.js` |
+| `callAudit/{autoId}` (collection, auto-ID docs, append-only) | `{timestamp, actor, summary, ops, warnings, committed}` — one entry per chief schedule edit made via WhatsApp | The bot's Cloud Function (Admin SDK). **Bot-only** — `firestore.rules` denies all client read/write. |
+| `pendingEdits/{chiefShortName}` (collection, doc ID = proposing chief's short name) | `{ops, summary, warnings, proposedBy, createdAt}` — transient "awaiting confirmation" state for a chief's proposed edit, between the propose message and the confirm message | The bot's Cloud Function (Admin SDK). **Bot-only** — `firestore.rules` denies all client read/write. |
 
 **The resident database and the six legacy bindings**: `App()` has a single `onSnapshot` listener on the `residents` collection that rebuilds the six module-level bindings described below (`rotationMap`, `levelMap`, `vacationWeeks`, `unwantedDays`, `residentProfiles`, `MASTER_ROTA`) from the live documents on every change — falling back to the embedded `DEFAULT_residentProfiles`/`DEFAULT_levelMap`/`DEFAULT_rotationMap` EXT entries only for any External Rotator not yet migrated into Firestore (all 53 residents are migrated as of this writing, so this fallback is currently a no-op, but it keeps future partial rollouts safe — a resident never vanishes mid-migration). This means every existing consumer of those six bindings (add-to-slot pickers, `buildFilterGroups()`, Daytime Coverage's `COVERAGE_TEAMS`, `checkWarnings()`, `exportDocx`'s badge coloring, `MasterRotaPage`) needed zero changes. If the `residents` collection is empty, every binding falls back to its `DEFAULT_*` baseline, so this is safe to deploy well ahead of running the one-time seed. A resident's `excludedFromBlock11:true` flag (see the "Scheduling rules" section above) removes them from `rotationMap`/`levelMap` (so they're not offered for scheduling) but not from `residentProfiles`/`MASTER_ROTA` (so they still show up in the Residents tab and Master Rota page). `masterRota:null` (External Rotators only, since they aren't part of the 13-block long-term rotation) excludes a resident from the `MASTER_ROTA` rebuild entirely, same as today.
 
@@ -112,6 +115,53 @@ node set-admin-claim.js someone@example.com false                # revoke
 ```
 
 **Resident metadata** for all 53 residents — the 49 Master Rota residents plus the 4 External Rotators (Musawi, Malak, F.Hamood, O.Alsaihati) — lives in the `residents` Firestore collection described above, admin-editable from the Residents tab. External Rotators have `full:null` (no full legal name was available anywhere in the codebase to migrate) and `masterRota:null` (they were never part of the 13-block long-term rotation). `BLOCK_VACATIONS` and `BLOCK_DATES` (the other 12 blocks' data, used only by the Master Rota browsing page) are still embedded `DEFAULT_*` constants, not Firestore — they change at "new block" cadence, which fits a code-edit workflow fine.
+
+## WhatsApp on-call bot (`bot/`)
+
+A Firebase **Cloud Function (2nd gen)** that lets residents ask about the schedule over WhatsApp, and lets chief residents edit it from chat. It reads/writes the **same Firestore project (`qhn-block11`)** as `app/index.html`, so a chief's chat edit lands in `schedules/block11` in the exact shape `writeSchedule()` uses and shows up live in every open browser tab via the app's existing `onSnapshot` listener — **the app's read side needs zero changes for this to work.** Full deploy/local-test runbook: `bot/README.md`.
+
+**Why this shape (and not the earlier plan):** an earlier iteration assumed the retired Flask/SQLite backend held phone numbers. It doesn't — and by the time the bot was built, the `residents/{name}` collection already existed and already stored `phone`/`email` per resident. So the bot has **no separate directory collection and no CSV name-matching**: it identifies a sender by scanning `residents` for a matching `phone`, and reads schedule/resident data straight from Firestore.
+
+### Auth model — the bot is a second trusted writer
+
+`firestore.rules` requires a `{admin:true}` custom claim to write the schedule — that's a *browser-session* concept (sign in → ID token → claim). A server bot has no user to sign in as, so it authenticates as a **service account via the Firebase Admin SDK, which bypasses security rules entirely by design** (same mechanism as `scripts/set-admin-claim.js`). `firestore.rules` is unchanged for the existing collections; the bot is simply a second writer at the same trust tier as an admin browser, authenticated a different way. The bot replicates the *intent* of the rule in application logic: only a sender whose `residents` doc has `role:"chief"` is offered the write tools (enforced server-side in `intentParser.js`, not just by prompt).
+
+### The shared constraint module
+
+`checkWarnings()` and its constant dependencies were extracted from `app/index.html` into **`app/checkWarnings.js`** so the app and the bot enforce the *same* scheduling rules with no risk of drift. It's environment-dual: a classic `<script>` in the browser (assigns `window.*`), and `module.exports` when required by Node. `checkWarnings(sched, name, toDate, toSlot, meta)` takes the resident-derived maps (`{rotationMap, vacationWeeks, unwantedDays}`) as an explicit `meta` arg rather than closing over mutable state — the browser passes its live `let` bindings; the bot passes a fresh Firestore read (`buildMeta()` in `scheduleActions.js`).
+
+**Two gotchas that dictate the `.cjs` copy** (`bot/checkWarnings.cjs`):
+1. `app/package.json` declares `"type":"module"`, so Node would parse `app/checkWarnings.js` as ESM and the `module.exports` branch would never run.
+2. Firebase Functions only bundles files inside the `source` dir (`bot/`), so `require('../app/checkWarnings')` would break in production anyway.
+
+So `bot/checkWarnings.cjs` is a **byte copy** of `app/checkWarnings.js` (`.cjs` forces CommonJS regardless of the ESM package), regenerated from the source by the `functions.predeploy` hook in `firebase.json` before every deploy. **Never edit `bot/checkWarnings.cjs` directly — edit `app/checkWarnings.js`.**
+
+### File breakdown (`bot/`)
+
+| File | Role |
+|---|---|
+| `index.js` | Webhook entry (`exports.whatsappWebhook`, `onRequest`). GET = Meta verification handshake; POST = verifies Meta's `X-Hub-Signature-256` HMAC against `req.rawBody` (constant-time) **before parsing anything**, identifies the sender, runs the agent, sends the reply, then acks 200. Secrets via `defineSecret` (Google Secret Manager), not committed. |
+| `directory.js` | `lookupSender(db, waPhone)` → `{name, role}` by scanning `residents` for a matching normalized phone (5-min in-memory cache). |
+| `intentParser.js` | The Claude (`claude-haiku-4-5`) tool-use loop. Read tools for everyone; the three write tools (`propose_edit`/`confirm_edit`/`discard_edit`) are appended **only when `role==="chief"`**. `runTool()` re-checks the role defensively. |
+| `scheduleActions.js` | Pure Firestore data layer: reads (`whoIsOnCall`, `getResidentCalls`, `getNextCall`, `findResident`) + the write flow (`proposeEdit` → `commitPending`), constraint validation via the shared module, and `callAudit` logging. No Claude/WhatsApp code here. |
+| `checkWarnings.cjs` | Generated copy of `app/checkWarnings.js` (see above). |
+| `whatsappClient.js` | Sends the reply via the Meta Graph API (`v21.0`), using Node's built-in `fetch`. |
+| `README.md` | Prereqs, local-emulator testing, deploy commands, smoke test. |
+
+### The chief write flow: propose → confirm → commit → audit
+
+WhatsApp is stateless per message (each inbound message is a separate webhook invocation), so a "propose then confirm" exchange persists its state in Firestore:
+
+1. **propose** — the agent resolves the edit to an ordered list of `ops` (`{op:"add"|"remove", name, date, slot}`; a swap = two removes + two adds, applied atomically), stages it in `pendingEdits/{chief}` with the computed warnings, and replies asking the chief to confirm. **Nothing is written to the schedule yet.**
+2. **confirm** — on the next message, `index.js` loads the pending doc and injects it into the agent's context; if the chief confirms, `commitPending()` **re-reads the schedule fresh** (in case it changed since the proposal — if the ops no longer apply, it aborts and discards), re-validates, writes `schedules/block11`, appends a `callAudit` entry, and clears the pending doc.
+3. **Warnings are advisory, not blocking** — matching the app's own behavior, where an admin can complete a drag-and-drop despite a warning banner. The bot surfaces warnings and lets the chief proceed through them.
+
+### Local test & deploy (summary — full detail in `bot/README.md`)
+
+- **Local:** `cp bot/.env.example bot/.env` (fill in), then run the bot in the Firebase emulator alongside the app; expose it to a Meta test webhook via a tunnel (`cloudflared`/`ngrok`). Emulator = never touches prod, same as the app.
+- **Deploy:** requires the project on the **Blaze** plan (Cloud Functions needs it; $0 within free tier). Set the five secrets with `firebase functions:secrets:set`, then `firebase deploy --only functions,firestore:rules`. Register the function URL as the Meta webhook and subscribe to `messages`.
+- **One-time data prep:** `scripts/backfill-resident-contacts.js` fills any missing `residents/{name}.phone` (matched against the staff-directory CSV by each doc's existing `full` name) and defaults `role:"resident"`; then set `role:"chief"` on the chief doc(s) in the Firebase console.
+- **Cost:** Cloud Functions + Firestore both stay within free tiers at this volume; the only real cost is the Claude API (~$5–20/mo). WhatsApp inbound Q&A and chief edits are free (user-initiated).
 
 ## Retired: the old Flask/SQLite backend
 

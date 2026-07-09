@@ -59,3 +59,7 @@ app/vite.config.js
 firestore-debug.log
 firebase-debug.log
 ui-debug.log
+
+# WhatsApp bot local secrets (production secrets live in Secret Manager
+# instead, set via `firebase functions:secrets:set` -- see bot/.env.example)
+bot/.env

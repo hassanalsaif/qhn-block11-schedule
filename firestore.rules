@@ -21,5 +21,18 @@ service cloud.firestore {
       allow read: if true;
       allow write: if request.auth != null && request.auth.token.admin == true;
     }
+    // WhatsApp bot bookkeeping. Both collections are touched ONLY by the bot's
+    // Cloud Function, which uses the Admin SDK and bypasses these rules. The
+    // rules exist to lock out every OTHER client:
+    //   callAudit    -- append-only edit log (contains actor + change details);
+    //                   no browser client may read or forge entries.
+    //   pendingEdits -- transient "awaiting confirmation" state, keyed by the
+    //                   proposing chief's short name; bot-internal only.
+    match /callAudit/{docId} {
+      allow read, write: if false;
+    }
+    match /pendingEdits/{docId} {
+      allow read, write: if false;
+    }
   }
 }
