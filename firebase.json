@@ -5,7 +5,7 @@
   "functions": {
     "source": "bot",
     "predeploy": [
-      "node -e \"require('fs').copyFileSync('app/checkWarnings.js','bot/checkWarnings.cjs')\""
+      "node scripts/sync-checkwarnings.js"
     ]
   },
   "emulators": {
