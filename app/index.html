@@ -2602,6 +2602,14 @@ function DraftResidentPanel({name,roster,days,blockNumber,onClose,onRemove}){
   const wdCount=calls.filter(c=>c.type==="WD").length;
   const weCount=calls.filter(c=>c.type==="WE").length;
   const leaveWeeks=(BLOCK_VACATIONS[blockNumber]||{})[name]||[];
+  // Turn "W1" into its actual date span within this draft ("Aug 2–Aug 8") so
+  // the chief can schedule day-by-day without cross-referencing week numbers.
+  const weekRange=(wk)=>{
+    const idx=parseInt(wk.slice(1),10)-1;
+    const start=days[idx*7],end=days[Math.min(idx*7+6,days.length-1)];
+    return start&&end?`${start.date}–${end.date}`:wk;
+  };
+  const unwantedDates=(UNWANTED_BY_BLOCK[String(blockNumber)]||{})[name]||[];
 
   return(
     <div onClick={e=>e.stopPropagation()} style={{width:255,flexShrink:0,background:"#fff",borderRadius:8,
@@ -2617,11 +2625,26 @@ function DraftResidentPanel({name,roster,days,blockNumber,onClose,onRemove}){
       <div style={{background:lc.light,padding:"4px 12px",fontSize:11,color:lc.tx,fontWeight:700,borderBottom:`1px solid ${lc.hdr}33`}}>
         {calls.length} call{calls.length!==1?"s":""} · {wdCount} WD + {weCount} WE{dcCalls.length?` · ${dcCalls.length} DC`:""}
       </div>
-      {leaveWeeks.length>0&&(
-        <div style={{padding:"6px 10px",borderBottom:"1px solid #f1f5f9"}}>
-          <span style={{fontSize:10,background:"#fffbeb",border:"1px solid #fcd34d",color:"#92400e",borderRadius:3,padding:"1px 6px"}}>
-            🏖 On leave: {leaveWeeks.join("+")}
-          </span>
+      {(leaveWeeks.length>0||unwantedDates.length>0)&&(
+        <div style={{padding:"6px 10px",borderBottom:"1px solid #f1f5f9",display:"flex",flexDirection:"column",gap:5}}>
+          {leaveWeeks.length>0&&(
+            <div style={{display:"flex",flexWrap:"wrap",gap:4,alignItems:"center"}}>
+              <span style={{fontSize:9.5,fontWeight:700,color:"#92400e"}}>🏖 Vacation:</span>
+              {leaveWeeks.map(wk=>(
+                <span key={wk} style={{fontSize:10,background:"#fffbeb",border:"1px solid #fcd34d",color:"#92400e",borderRadius:3,padding:"1px 6px"}}>
+                  {wk} ({weekRange(wk)})
+                </span>
+              ))}
+            </div>
+          )}
+          {unwantedDates.length>0&&(
+            <div style={{display:"flex",flexWrap:"wrap",gap:4,alignItems:"center"}}>
+              <span style={{fontSize:9.5,fontWeight:700,color:"#9a3412"}}>🚫 Unwanted:</span>
+              {unwantedDates.map(d=>(
+                <span key={d} style={{fontSize:10,background:"#fff7ed",border:"1px solid #fdba74",color:"#9a3412",borderRadius:3,padding:"1px 6px"}}>{d}</span>
+              ))}
+            </div>
+          )}
         </div>
       )}
       <div style={{maxHeight:300,overflowY:"auto"}}>
@@ -2692,6 +2715,8 @@ function NewBlockPage({schedMeta,draft,writeDraft,clearDraft,onPublish,isAdmin})
   const[pickSearch,setPickSearch]=useState("");
   const[fullView,setFullView]=useState(false); // Day View vs Full Schedule, like the Schedule tab
   const[spotlight,setSpotlight]=useState(null); // resident name whose profile panel is open
+  const[addResOpen,setAddResOpen]=useState(false); // "add resident to roster" search panel
+  const[addResSearch,setAddResSearch]=useState("");
 
   // Picking a new target block re-seeds the date fields from BLOCK_DATES
   // (only when there's no draft yet for it -- don't clobber a saved draft's dates).
@@ -2736,7 +2761,22 @@ function NewBlockPage({schedMeta,draft,writeDraft,clearDraft,onPublish,isAdmin})
 
   // ── Draft slot editing: mutate draft.days and persist the whole draft. ──
   const draftBlock=draft?.blockNumber;
-  const editRoster=draft?deriveBlockRoster(draftBlock):[];
+  const autoRoster=draft?deriveBlockRoster(draftBlock):[];
+  // Manually-added residents (draft.extraResidents) on top of the auto-derived
+  // Master Rota roster -- e.g. someone whose rotation code got auto-excluded
+  // (elective/ER/PHC) but the chief still wants available, or an External
+  // Rotator who isn't in MASTER_ROTA at all.
+  const extraResidents=draft?.extraResidents||[];
+  const editRoster=[...autoRoster,...extraResidents.filter(e=>!autoRoster.some(a=>a.name===e.name))]
+    .sort((a,b)=>a.name.localeCompare(b.name));
+  const addExtraResident=(name)=>{
+    if(!draft||autoRoster.some(r=>r.name===name)||extraResidents.some(r=>r.name===name))return;
+    const mr=MASTER_ROTA.find(r=>r.name===name);
+    const entry={name,level:levelMap[name]||mr?.lv||"?",rotation:mr?(mr.b[draftBlock-1]||"—"):"Manually added"};
+    writeDraft({...draft,extraResidents:[...extraResidents,entry]});
+    setAddResSearch("");
+  };
+  const removeExtraResident=(name)=>writeDraft({...draft,extraResidents:extraResidents.filter(e=>e.name!==name)});
   const saveDays=(newDays)=>writeDraft({...draft,days:newDays});
   const addToSlot=(di,slot,name)=>{
     const newDays=draft.days.map((r,i)=>i!==di?r:{...r,[slot]:[...(r[slot]||[]),name]});
@@ -2800,6 +2840,55 @@ function NewBlockPage({schedMeta,draft,writeDraft,clearDraft,onPublish,isAdmin})
           {draft&&<button onClick={()=>clearDraft()} style={{...btnStyle,background:"#fff",color:"#64748b",border:"1px solid #cbd5e1"}}>Discard draft</button>}
         </div>
         {err&&<div style={{fontSize:11.5,color:"#dc2626",marginTop:8}}>{err}</div>}
+
+        {draft&&(()=>{
+          // Universe of every possible resident (all MASTER_ROTA + external
+          // rotators), so the chief can pull in someone the auto-derived
+          // roster excluded (elective/ER/PHC that block) or an EXT resident
+          // not tracked in Master Rota at all.
+          const allNames=[...new Set([...MASTER_ROTA.map(r=>r.name),...residentProfiles.filter(p=>p.level==="EXT").map(p=>p.name)])];
+          const addable=allNames.filter(n=>!editRoster.some(r=>r.name===n));
+          const q=addResSearch.trim().toLowerCase();
+          const matches=addable.filter(n=>!q||n.toLowerCase().includes(q)).sort().slice(0,40);
+          return(
+            <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid #f1f5f9"}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:addResOpen?6:0}}>
+                <span style={{fontSize:11,fontWeight:700,color:"#1e3a5f"}}>Roster: {editRoster.length} residents</span>
+                <button onClick={()=>{setAddResOpen(o=>!o);setAddResSearch("");}}
+                  style={{fontSize:11,padding:"3px 9px",borderRadius:5,border:"1px dashed #94a3b8",
+                    background:addResOpen?"#e0e7ff":"#f8fafc",color:"#475569",cursor:"pointer"}}>
+                  {addResOpen?"× Close":"+ Add resident to roster"}
+                </button>
+                {extraResidents.length>0&&(
+                  <span style={{fontSize:10.5,color:"#64748b"}}>
+                    Manually added:{extraResidents.map(e=>(
+                      <span key={e.name} style={{marginLeft:5,fontWeight:600,color:"#334155"}}>
+                        {e.name}
+                        <span onClick={()=>removeExtraResident(e.name)} title="Remove from roster"
+                          style={{cursor:"pointer",color:"#dc2626",fontWeight:800,marginLeft:2}}>×</span>
+                      </span>
+                    ))}
+                  </span>
+                )}
+              </div>
+              {addResOpen&&(
+                <div>
+                  <input autoFocus placeholder="Search any resident…" value={addResSearch} onChange={e=>setAddResSearch(e.target.value)}
+                    style={{width:220,padding:"5px 8px",fontSize:12,borderRadius:5,border:"1px solid #cbd5e1",marginBottom:6,boxSizing:"border-box"}}/>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:5,maxHeight:150,overflowY:"auto"}}>
+                    {matches.map(n=>(
+                      <button key={n} onClick={()=>addExtraResident(n)}
+                        style={{fontSize:11,padding:"3px 8px",borderRadius:5,border:"1px solid #cbd5e1",background:"#fff",color:"#334155",cursor:"pointer"}}>
+                        + {n}
+                      </button>
+                    ))}
+                    {matches.length===0&&<span style={{fontSize:11.5,color:"#94a3b8"}}>No matches.</span>}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {!draft&&(
