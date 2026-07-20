@@ -18,7 +18,7 @@ python -m http.server 3412 --directory app
 
 Then open **http://localhost:3412** in a browser. The Claude preview panel is configured to start this server automatically via `.claude/launch.json`.
 
-The app runs as a standalone HTML file (`app/index.html`) that uses **Babel Standalone** (CDN) to transpile JSX in the browser at runtime. There is no build/compile step.
+The app runs as a standalone HTML file (`app/index.html`) that uses **Babel Standalone** (CDN) to transpile JSX in the browser at runtime. There is no build/compile step. React, ReactDOM, Babel, and the Firebase SDK load from CDNs (unpkg / gstatic); **JSZip is the exception — it is vendored locally as `app/jszip.min.js`** and loaded via `<script src="jszip.min.js">`.
 
 **To test admin login / schedule edits locally**, also run the Firebase Local Emulator Suite (needs a JRE installed — the Firestore emulator is Java-based):
 ```bash
@@ -33,9 +33,11 @@ The app auto-detects `localhost`/`127.0.0.1` and points at the emulators (ports 
 | `block11_schedule.jsx` | **Source of truth** — full React app as JSX. Edit this file first. |
 | `app/index.html` | **What the browser serves** — a copy of the JSX embedded inside a `<script type="text/babel">` tag with `import`/`export` lines removed. Must be kept in sync with the JSX manually. |
 | `app/block11_template.docx` | Original blank Word template used by the export function as a fill-in base. |
-| `block 11.docx` | The original template in the project root (same file, copied to app/). |
-| `app/src/App.jsx` + `app/src/main.jsx` | Vite entry points (installed but not currently used — Python server is active). |
+| `app/jszip.min.js` | Vendored JSZip library (used by `exportDocx`). Also copied into `deploy/`. |
+| `block 11.docx` | The original template in the project root (same file, copied to app/). Gitignored. |
+| `app/src/App.jsx` + `app/src/main.jsx` | Vite entry points (installed but not currently used — Python server is active). Gitignored (`app/src/`). |
 | `deploy/index.html` | **What production (GitHub Pages) actually serves** — a separate copy of `app/index.html`, not a build artifact. Must be kept in sync manually; see "Deploying to production" below. |
+| `deploy/privacy-policy.html` | Standalone privacy policy page (for the WhatsApp bot's Meta app config), served at `/privacy-policy.html` on GitHub Pages. |
 
 **When editing logic**: change `block11_schedule.jsx`, then mirror the same change into `app/index.html` (replacing `import { useState } from "react"` → `const { useState } = React;` and removing `export default`).
 
@@ -45,7 +47,7 @@ The app auto-detects `localhost`/`127.0.0.1` and points at the emulators (ports 
 
 Production is GitHub Pages, deployed by `.github/workflows/deploy-pages.yml` from the **`deploy/`** folder — not `app/`. Critically, that workflow only triggers `on: push` with `paths: ['deploy/**', ...]`, so **a commit that only touches `app/index.html` (or `block11_schedule.jsx`) does not deploy, silently.** There's no error, no failed check — the workflow simply never runs, and production keeps serving the old build.
 
-After changing `app/index.html`, copy it over `deploy/index.html` (`cp app/index.html deploy/index.html`), commit, and push to `main` before considering the change shipped. Verify a deploy actually happened by checking that the latest "Deploy to GitHub Pages" run's commit SHA matches your push (`https://github.com/hassanalsaif/qhn-block11-schedule/actions`), not just that `git push` succeeded.
+After changing `app/index.html`, copy it over `deploy/index.html` (`cp app/index.html deploy/index.html`), commit, and push to `main` before considering the change shipped. (`deploy/` also carries its own copies of `jszip.min.js`, `block11_template.docx`, and `privacy-policy.html` — sync those too if you change them.) Verify a deploy actually happened by checking that the latest "Deploy to GitHub Pages" run's commit SHA matches your push (`https://github.com/hassanalsaif/qhn-block11-schedule/actions`), not just that `git push` succeeded.
 
 ## Architecture
 
@@ -59,7 +61,7 @@ Everything lives in a single React component file (`block11_schedule.jsx`). Key 
 
 4. **`checkWarnings(sched, name, toDate, toSlot)`** — Runs all constraint checks and returns an array of warning strings. Called every time a resident is dropped into a new slot.
 
-5. **`exportDocx(sched)`** — Fetches `block11_template.docx`, opens it with JSZip (CDN), injects resident names into the correct XML cells, and downloads the filled DOCX. Column mapping:
+5. **`exportDocx(sched)`** — Fetches `block11_template.docx`, opens it with JSZip (vendored locally, see File layout), injects resident names into the correct XML cells, and downloads the filled DOCX. Column mapping:
    - Weekdays (Sun–Thu): col 6=SO, 7=NICU, 8=PICU, 9=PMW
    - Weekends (Fri–Sat): cols 4+5 are merged/grey; col 5=SO, 6=NICU, 7=PICU, 8=PMW
    - Last row (Aug 1 Sat) cell 8 is skipped — it contains the department disclaimer text.
