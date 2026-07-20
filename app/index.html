@@ -168,6 +168,26 @@ const nicuUnit       = new Set(["H.Amrad","Z.Sairafi","Sajad","Yasir","Sajidah",
 const picuUnit       = new Set(["F.Saffar","Shahad","A.Darora","A.Dayin"]);
 const DEFAULT_unwantedDays = {"Dina":["Jul 31","Aug 1"],"Mustafa":["Jul 26","Aug 1"],"Yasir":["Jul 10","Jul 11"],"Shahad":["Jul 16","Jul 17","Jul 18","Jul 19","Jul 27","Jul 28","Jul 29"],"A.Rashid":["Jul 31","Aug 1"],"Z.Alwan":["Jul 12","Jul 13"],"Z.Madeh":["Jul 17","Jul 18"],"Z.Madan":["Jul 31","Aug 1"],"Anwar":["Jul 8","Jul 9"],"F.Ghanim":["Jul 7","Jul 30","Jul 31","Aug 1"],"S.Zaidani":["Jul 5","Jul 6"]};
 let unwantedDays = DEFAULT_unwantedDays;
+// Block 12 (2 Aug – 29 Aug 2026) hasn't been built as a live schedule yet --
+// this is staging data only, collected via a Google Form ahead of time so
+// the chief resident can import it directly when Block 12's schedule grid
+// is created (same "unwanted days" concept as DEFAULT_unwantedDays above,
+// just keyed to Block 12 dates). Firestore-backed the same way (see
+// `unwantedDaysB12` collection + UnwantedDaysB12Page below); this constant
+// is only the fallback shown before that doc exists / loads.
+const DEFAULT_unwantedDaysB12 = {
+  "F.Saffar":["Aug 8","Aug 29"],
+  "S.Zaidani":["Aug 14","Aug 15"],
+  "H.Amrad":["Aug 14","Aug 15"],
+  "Reem":["Aug 7","Aug 8"],
+  "Entisar":["Aug 14","Aug 15"],
+  "Shahad":["Aug 4","Aug 27"],
+  "A.Rashid":["Aug 28"],
+  "A.Dayin":["Aug 28","Aug 29"],
+  "Z.Khowaildi":["Aug 6","Aug 7"],
+  "Z.Alwan":["Aug 11","Aug 28"],
+  "Erum":["Aug 28","Aug 29"],
+};
 const DEFAULT_vacationWeeks = {"A.Qassab":["W2","W3","W4"],"Safia":["W1","W2"],"Arwa":["W1","W2"],"A.Ibrahim":["W3","W4"],"Shahad":["W1","W2"],"Wasayif":["W3","W4"],"Abdulla":["W2","W3","W4"],"H.Salman":["W1","W2","W3","W4"],"Z.Alwan":["W1"],"Z.Abdulmohsen":["W1","W2"],"Z.Aman":["W2","W3"],"Z.Madeh":["W3","W4"],"Z.Madan":["W1","W2"]};
 let vacationWeeks = DEFAULT_vacationWeeks;
 
@@ -963,6 +983,194 @@ function ResidentTracker({sched,spotlight,setSpotlight,setSelected,setWarnings})
         fontSize:9,color:"#94a3b8",textAlign:"center",flexShrink:0}}>
         Click resident → view &amp; edit calls
       </div>
+    </div>
+  );
+}
+
+// ── Unwanted Days — Block 12 (staging page) ──────────────────────────────────
+// Block 12 (2–29 Aug 2026) has no live schedule grid yet. This page just lets
+// the chief resident record/edit each resident's unwanted days ahead of time
+// (collected via a Google Form) so the data is ready to import the moment
+// Block 12's schedule is built -- same shape as Block 11's unwantedDays,
+// stored separately (Firestore `unwantedDaysB12/data`) since it must not
+// touch Block 11's live schedule/checkWarnings.
+//
+// Who's "in" a given block is NOT the same set as Block 11's
+// residentProfiles -- that set is baked to Block 11's own rotations
+// (rotationMap/levelMap, i.e. each resident's MASTER_ROTA entry at index
+// 10). A resident off ward service in Block 11 (elective/ER/vacation/PHC)
+// can easily be back on ward service in Block 12, and vice versa. So
+// getBlockRoster(n) derives block n's roster fresh from MASTER_ROTA's
+// index-(n-1) entry (BLOCK_DATES' n:{n} block), using the same off-ward
+// rotation codes that explain today's Block 11 exclusions (ELECTIVE/ER/V/
+// PHC/WBC never appear as an *included* Block 11 resident's rotationMap
+// value) -- everyone else counts as on ward service. External Rotators
+// have no MASTER_ROTA entry (masterRota:null) and are always included,
+// same as Block 11. NOTE: Maab and A.Marzooq carry a manual `excl11`
+// override in MASTER_ROTA (their Block 11 rotation codes don't match the
+// off-ward set, so something else took them off Block 11's roster) --
+// that override is Block-11-specific and does NOT carry over to other
+// blocks; they're flagged in the UI so the chief resident can confirm.
+const BLOCK_OFFWARD_ROTATIONS = new Set(["ELECTIVE","ER","V","PHC","WBC"]);
+function getBlockRoster(blockNum){
+  const idx = blockNum-1;
+  const fromMasterRota = MASTER_ROTA.map(m=>{
+    const rotation = (m.b||[])[idx] || null;
+    const base = (rotation||"").split("/")[0];
+    return { name:m.name, level:m.lv, rotation, hadBlock11Override:!!m.excl11 };
+  }).filter(r=>!BLOCK_OFFWARD_ROTATIONS.has((r.rotation||"").split("/")[0]));
+  const extNames = Object.keys(levelMap).filter(n=>levelMap[n]==="EXT");
+  const ext = extNames.map(name=>({name, level:"EXT", rotation:null, hadBlock11Override:false}));
+  return [...fromMasterRota, ...ext];
+}
+// Converts a resident's vacation week codes (["W1","W3","W4"], as stored in
+// BLOCK_VACATIONS[blockNum]) into actual calendar date ranges for that
+// specific block, using BLOCK_DATES' start date -- so the same week code
+// (e.g. "W2") maps to different real dates depending which block it's in.
+// Consecutive weeks compress into one range ("11–24 Aug" for W2+W3).
+function weekCodesToDateRange(blockNum, weekCodes){
+  if(!weekCodes||weekCodes.length===0)return null;
+  const bd=BLOCK_DATES.find(b=>b.n===blockNum);
+  if(!bd)return null;
+  const start=new Date(bd.sy,bd.sm-1,bd.sd);
+  const mo=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const fmt=dt=>`${dt.getDate()} ${mo[dt.getMonth()]}`;
+  const nums=weekCodes.map(w=>parseInt(w.slice(1),10)).sort((a,b)=>a-b);
+  const ranges=[];let s=nums[0],p=nums[0];
+  for(let i=1;i<=nums.length;i++){
+    const n=nums[i];
+    if(n===p+1){p=n;continue;}
+    ranges.push([s,p]);
+    if(i<nums.length){s=p=n;}
+  }
+  return ranges.map(([ws,we])=>{
+    const wkStart=new Date(start.getTime()+(ws-1)*7*86400000);
+    const wkEnd=new Date(start.getTime()+we*7*86400000-86400000);
+    return `${fmt(wkStart)} – ${fmt(wkEnd)}`;
+  }).join(", ");
+}
+function UnwantedDaysB12Page({values,isAdmin,onSave}){
+  const[search,setSearch]=useState("");
+  const[editingName,setEditingName]=useState(null);
+  const[draft,setDraft]=useState("");
+  const[blockNum,setBlockNum]=useState(12);
+
+  const levels=["R4","R3","R2","R1","EXT"];
+  const roster=getBlockRoster(blockNum);
+  const blockVacations=BLOCK_VACATIONS[blockNum]||{};
+  const q=search.trim().toLowerCase();
+  const matches=r=>{
+    if(!q)return true;
+    const full=(MASTER_ROTA.find(m=>m.name===r.name)||{}).full||"";
+    return r.name.toLowerCase().includes(q)||full.toLowerCase().includes(q)||(r.rotation||"").toLowerCase().includes(q);
+  };
+
+  function startEdit(name){
+    setEditingName(name);
+    setDraft((values[name]||[]).join(", "));
+  }
+  function saveEdit(name){
+    const days=draft.split(",").map(s=>s.trim()).filter(Boolean);
+    const next={...values};
+    if(days.length===0)delete next[name];else next[name]=days;
+    onSave(next);
+    setEditingName(null);setDraft("");
+  }
+
+  const totalMarked=Object.keys(values).length;
+  const bd=BLOCK_DATES.find(b=>b.n===blockNum);
+
+  return(
+    <div style={{padding:"0 0 24px"}}>
+      <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10,flexWrap:"wrap"}}>
+        <label style={{fontSize:11,fontWeight:700,color:"#475569",display:"flex",alignItems:"center",gap:5}}>
+          Roster &amp; vacations for
+          <select value={blockNum} onChange={e=>setBlockNum(Number(e.target.value))}
+            style={{fontSize:12,fontWeight:700,padding:"5px 8px",borderRadius:5,border:"1.5px solid #cbd5e1",background:"#fff",color:"#1e3a5f"}}>
+            {BLOCK_DATES.map(b=>(<option key={b.n} value={b.n}>{b.label} ({b.greg})</option>))}
+          </select>
+        </label>
+        {blockNum!==12&&(
+          <span style={{fontSize:11,color:"#9a3412",background:"#fff7ed",border:"1px solid #fdba74",borderRadius:4,padding:"2px 8px"}}>
+            Unwanted days below are Block 12-specific (the only block collected so far) — roster &amp; vacations reflect Block {blockNum}
+          </span>
+        )}
+      </div>
+      <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:14,flexWrap:"wrap"}}>
+        <div style={{position:"relative",flex:1,minWidth:200}}>
+          <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:14,color:"#94a3b8"}}>🔍</span>
+          <input placeholder="Search by name, rotation, or level (R3, EXT…)" value={search}
+            onChange={e=>setSearch(e.target.value)}
+            style={{width:"100%",padding:"8px 12px 8px 34px",fontSize:13,borderRadius:7,
+              border:"1.5px solid #cbd5e1",outline:"none",background:"#fff",boxSizing:"border-box"}}/>
+        </div>
+        {search&&<button onClick={()=>setSearch("")}
+          style={{padding:"7px 14px",borderRadius:6,border:"1px solid #cbd5e1",
+            background:"#f1f5f9",color:"#475569",cursor:"pointer",fontSize:12,fontWeight:600}}>✕ Clear</button>}
+        <span style={{fontSize:11,color:"#94a3b8",whiteSpace:"nowrap"}}>{roster.length} on ward duty · {totalMarked} with Block 12 unwanted days marked</span>
+      </div>
+
+      {levels.map(lvl=>{
+        const group=roster.filter(r=>r.level===lvl&&matches(r)).sort((a,b)=>a.name.localeCompare(b.name));
+        if(group.length===0)return null;
+        const lc=levelColors[lvl];
+        return(
+          <div key={lvl}>
+            <div style={{margin:"20px 0 10px",paddingBottom:4,borderBottom:`3px solid ${lc.hdr}`,display:"flex",alignItems:"center",gap:8}}>
+              <span style={{background:lc.hdr,color:"#fff",borderRadius:4,padding:"2px 10px",fontSize:13,fontWeight:800}}>{lvl}</span>
+              <span style={{fontSize:13,fontWeight:700,color:lc.tx}}>{lvl==="EXT"?"External Rotators":"Residents"}</span>
+              <span style={{fontSize:11,color:"#94a3b8"}}>({group.length})</span>
+            </div>
+
+            {group.map(res=>{
+              const isEditing=editingName===res.name;
+              const days=values[res.name]||[];
+              const vacRange=weekCodesToDateRange(blockNum,blockVacations[res.name]);
+              return(
+                <div key={res.name} style={{background:"#fff",borderRadius:8,border:`1px solid ${lc.light}`,marginBottom:8,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+                  <div style={{padding:"8px 14px 4px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                    <span style={{fontSize:14,fontWeight:800,color:lc.hdr,minWidth:110}}>{res.name}</span>
+                    <span style={{fontSize:11,fontWeight:600,color:lc.tx,background:lc.light,borderRadius:3,padding:"1px 7px"}}>{res.level}</span>
+                    {res.rotation&&<span style={{fontSize:11,fontWeight:600,color:"#334155",background:"#f1f5f9",borderRadius:3,padding:"1px 7px"}}>{res.rotation}</span>}
+                    {vacRange&&<span style={{fontSize:11,fontWeight:600,color:"#92400e",background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:3,padding:"1px 7px"}}>🌴 Vacation: {vacRange}</span>}
+                    {res.hadBlock11Override&&(
+                      <span title="Manually excluded from Block 11's roster for a reason not captured in the rotation data -- verify this resident's status this block." style={{fontSize:10.5,fontWeight:700,color:"#9a3412",background:"#fff7ed",border:"1px solid #fdba74",borderRadius:3,padding:"1px 7px"}}>⚠ verify status</span>
+                    )}
+                  </div>
+                  <div style={{padding:"4px 14px 8px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                    {isEditing?(
+                      <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:6,alignItems:"center",flex:1,minWidth:220}}>
+                        <input value={draft} onChange={e=>setDraft(e.target.value)}
+                          placeholder='e.g. "Aug 8, Aug 29"'
+                          style={{flex:1,fontSize:12,padding:"5px 7px",borderRadius:4,border:"1px solid #cbd5e1",boxSizing:"border-box"}}/>
+                        <button onClick={()=>saveEdit(res.name)}
+                          style={{fontSize:11,fontWeight:700,padding:"5px 12px",borderRadius:5,border:"1px solid #166534",background:"#dcfce7",color:"#166534",cursor:"pointer"}}>💾 Save</button>
+                        <button onClick={()=>{setEditingName(null);setDraft("");}}
+                          style={{fontSize:11,fontWeight:700,padding:"5px 12px",borderRadius:5,border:"1px solid #cbd5e1",background:"#fff",color:"#64748b",cursor:"pointer"}}>Cancel</button>
+                      </div>
+                    ):(
+                      <>
+                        <div style={{display:"flex",flexWrap:"wrap",gap:5,flex:1}}>
+                          {days.length===0
+                            ?<span style={{fontSize:11.5,color:"#cbd5e1"}}>No Block 12 unwanted days</span>
+                            :days.map((d,i)=>(
+                              <span key={i} style={{fontSize:11,background:"#fef2f2",border:"1px solid #fca5a5",color:"#dc2626",borderRadius:4,padding:"2px 8px"}}>⛔ {d}</span>
+                            ))}
+                        </div>
+                        {isAdmin&&(
+                          <button onClick={()=>startEdit(res.name)}
+                            style={{fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:5,cursor:"pointer",
+                              border:`1px solid ${lc.hdr}`,background:"#fff",color:lc.hdr}}>✏️ Edit</button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -2376,6 +2584,21 @@ function App(){
     ...patch, updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
     updatedBy:firebase.auth().currentUser?.uid||null,
   },{merge:true});
+
+  // Unwanted Days -- Block 12 staging data (no live Block 12 schedule exists
+  // yet; see UnwantedDaysB12Page above). Falls back to DEFAULT_unwantedDaysB12
+  // (the Google Form responses collected so far) until the doc exists, same
+  // fallback-then-live pattern as the legacy unwantedDays binding.
+  const[unwantedDaysB12,setUnwantedDaysB12]=useState(DEFAULT_unwantedDaysB12);
+  useEffect(()=>{
+    return firebase.firestore().collection('unwantedDaysB12').doc('data')
+      .onSnapshot(snap=>{ setUnwantedDaysB12(snap.exists?snap.data().values:DEFAULT_unwantedDaysB12); });
+  },[]);
+  const unwantedDaysB12DocRef=firebase.firestore().collection('unwantedDaysB12').doc('data');
+  const writeUnwantedDaysB12=(values)=>unwantedDaysB12DocRef.set({
+    values, updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+    updatedBy:firebase.auth().currentUser?.uid||null,
+  });
   // ── Is a resident highlighted by the active filter or spotlight? ──
   const isHighlighted = name => {
     if(spotlight && name!==spotlight) return false;
@@ -2750,7 +2973,7 @@ function App(){
         {/* ── Page tabs ── */}
         <div className="tab-strip" style={{display:"flex",gap:0,marginBottom:10,borderBottom:"2px solid #e2e8f0",
           overflowX:"auto",overflowY:"hidden",flexWrap:"nowrap",maxWidth:"100%",touchAction:"pan-x"}}>
-          {[["schedule","📅 Schedule"],["coverage","🩺 Daytime Coverage"],["consultants","🧑‍⚕️ Subspecialty Consultants"],["residents","👤 Residents"],["rota","📋 Master Rota"]].map(([p,label])=>(
+          {[["schedule","📅 Schedule"],["coverage","🩺 Daytime Coverage"],["consultants","🧑‍⚕️ Subspecialty Consultants"],["residents","👤 Residents"],["rota","📋 Master Rota"],["unwanted12","🚫 Unwanted Days (B12)"]].map(([p,label])=>(
             <button key={p} onClick={()=>setPage(p)} style={{
               padding:"6px 18px",fontSize:12,fontWeight:700,cursor:"pointer",border:"none",
               background:"none",borderBottom:`3px solid ${page===p?"#1e3a5f":"transparent"}`,
@@ -2818,6 +3041,8 @@ function App(){
         <div style={{marginTop:6,padding:"5px 10px",background:"#f0f9ff",borderRadius:5,fontSize:11,color:"#0369a1",border:"1px solid #bae6fd"}}>
           {page==="residents"
             ?"👤 Resident database — search by name, rotation, or level. Phone, Master Rota, vacation, unwanted days, constraints, and call details with gap analysis."
+            :page==="unwanted12"
+            ?"🚫 Staging area for Block 12 (2–29 Aug 2026) unwanted days — Block 12's schedule hasn't been built yet. Enter/edit each resident's unwanted days here now so they're ready to import the moment Block 12 goes live. Pick any block above to cross-check its ward roster and each resident's vacation dates for that block."
             :page==="coverage"
             ?"🩺 Daytime team coverage for every day — who's present vs post-call/on-vacation, by team & level. Use it to pull an available resident into a short team."
             :page==="consultants"
@@ -2856,6 +3081,13 @@ function App(){
       {page==="residents"&&(
         <div onClick={e=>e.stopPropagation()}>
           <ResidentsPage sched={sched} residents={residents} isAdmin={isAdmin} writeResident={writeResident}/>
+        </div>
+      )}
+
+      {/* ── PAGE 6: Unwanted Days — Block 12 (staging) ── */}
+      {page==="unwanted12"&&(
+        <div onClick={e=>e.stopPropagation()}>
+          <UnwantedDaysB12Page values={unwantedDaysB12} isAdmin={isAdmin} onSave={writeUnwantedDaysB12}/>
         </div>
       )}
 
