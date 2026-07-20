@@ -392,7 +392,7 @@ function checkWarnings(newSched,name,toDate,toSlot){
   return warns;
 }
 
-async function exportDocx(sched){
+async function exportDocx(sched,meta){
   if(typeof JSZip==="undefined")throw new Error("JSZip library not loaded — check internet connection and refresh the page.");
   const resp=await fetch("block11_template.docx?v=" + Date.now());
   if(!resp.ok)throw new Error(`Template not found (HTTP ${resp.status}). Make sure block11_template.docx is in the app/ folder.`);
@@ -453,9 +453,26 @@ async function exportDocx(sched){
   }
 
   zip.file("word/document.xml",parts.join("<w:tr "));
+
+  // Optional block-number/date-range/chief branding patch, confined to the
+  // Word header part (word/header2.xml) -- document.xml's own table cells
+  // already get their dates from `sched` above and need no patching.
+  if(meta&&meta.startDate){
+    const headerFile=zip.file("word/header2.xml");
+    if(headerFile){
+      let hxml=await headerFile.async("string");
+      const{gregRangeCompact,hijriRangeCompact}=blockRangeCompact(meta.startDate.y,meta.startDate.m,meta.startDate.d);
+      hxml=hxml.replace(/(<w:t[^>]*>)11(<\/w:t>)/,`$1${meta.blockNumber}$2`);
+      hxml=hxml.replace("07/06/2026-04/07/2026",gregRangeCompact);
+      hxml=hxml.replace("21-12-1447 to 19-01-1448",hijriRangeCompact);
+      if(meta.actingChief)hxml=hxml.replace("Hassan AlSaif",meta.actingChief);
+      zip.file("word/header2.xml",hxml);
+    }
+  }
+
   const blob=await zip.generateAsync({type:"blob",mimeType:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"});
   const url=URL.createObjectURL(blob);
-  const a=document.createElement("a");a.href=url;a.download="Block11_Schedule_Filled.docx";
+  const a=document.createElement("a");a.href=url;a.download=meta?.filename||"Block11_Schedule_Filled.docx";
   document.body.appendChild(a);a.click();document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(url),3000);
 }
@@ -951,6 +968,232 @@ const DEFAULT_MASTER_ROTA=[
   {name:"Z.Abdulmohsen",full:"Zahra Abdulmohsen",            lv:"R1", b:["GP","WBC","GP","NICU","GP/V","PICU","NICU","PHC","GP","GP","ANESSIM","ER","GP/V"]},
 ];
 let MASTER_ROTA = DEFAULT_MASTER_ROTA;
+
+// ── Unwanted days, nested by block number, one Firestore collection for every
+// block (unwantedDaysByBlock/{n}, {days:{ShortName:[dateLabels]}}) instead of
+// scattered per-block CSV exports. UNWANTED_BY_BLOCK is the live mirror (kept
+// in sync by App()'s onSnapshot listener below) that pure helpers like
+// draftWarnings read synchronously, same pattern as MASTER_ROTA/BLOCK_VACATIONS.
+// The two DEFAULT_* constants below are the one-time seed data transcribed
+// from the submission forms: Block 11's is the same data already encoded in
+// DEFAULT_unwantedDays (plus A.Dayin, present in residentProfiles' `unwanted`
+// field but missing from that map) so Block 11 lives in this same unified
+// place too; Block 12's is transcribed from "Unwanted days Block 12 .csv",
+// full names matched to MASTER_ROTA short names, ISO dates converted to the
+// app's "Mon D" day-label format. Free-text-only requests with no parseable
+// date (e.g. Qasim's "No last weekend", A.Marzooq's outside-rotation note)
+// are intentionally omitted -- not convertible to specific dates.
+const DEFAULT_UNWANTED_BLOCK11={
+  "Dina":["Jul 31","Aug 1"],"Mustafa":["Jul 26","Aug 1"],"Yasir":["Jul 10","Jul 11"],
+  "Shahad":["Jul 16","Jul 17","Jul 18","Jul 19","Jul 27","Jul 28","Jul 29"],
+  "A.Rashid":["Jul 31","Aug 1"],"Z.Alwan":["Jul 12","Jul 13"],"Z.Madeh":["Jul 17","Jul 18"],
+  "Z.Madan":["Jul 31","Aug 1"],"Anwar":["Jul 8","Jul 9"],"F.Ghanim":["Jul 7","Jul 30","Jul 31","Aug 1"],
+  "S.Zaidani":["Jul 5","Jul 6"],"A.Dayin":["Jul 10","Jul 17"],
+};
+const DEFAULT_UNWANTED_BLOCK12={
+  "F.Saffar":["Aug 8","Aug 29"],"S.Zaidani":["Aug 14","Aug 15"],"H.Amrad":["Aug 14","Aug 15"],
+  "Reem":["Aug 7","Aug 8"],"Entisar":["Aug 14","Aug 15"],"Shahad":["Aug 4","Aug 27"],
+  "A.Rashid":["Aug 28"],"A.Dayin":["Aug 28","Aug 29"],"Z.Khowaildi":["Aug 6","Aug 7"],
+  "Z.Alwan":["Aug 11","Aug 28"],"Erum":["Aug 28","Aug 29"],
+};
+let UNWANTED_BY_BLOCK={}; // {"11":{Name:[dates]}, "12":{...}, ...} -- rebuilt from Firestore, empty until seeded
+
+// ── New Block drafting helpers ──────────────────────────────────────────────
+// Tabular ("Kuwaiti algorithm") Gregorian→Hijri conversion -- an
+// astronomical approximation, not a religious-authority calendar, but good
+// enough for a draft the chief resident will hand-correct before sending it
+// out. No Hijri library is loaded anywhere else in this file.
+const HIJRI_MONTHS_ABBR=["Muh","Saf","Rabi I","Rabi II","Jum I","Jum II","Raj","Sha","Ram","Shaw","DhuQ","DhuH"];
+const HIJRI_MONTHS_FULL=["Muharram","Safar","Rabi' I","Rabi' II","Jumada I","Jumada II","Rajab","Sha'ban","Ramadan","Shawwal","Dhul-Qadah","Dhul-Hijjah"];
+const GREG_MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const WEEKDAY_ABBR=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+function gregorianToHijri(y,m,d){
+  const jd=Math.floor((1461*(y+4800+Math.floor((m-14)/12)))/4)
+    +Math.floor((367*(m-2-12*Math.floor((m-14)/12)))/12)
+    -Math.floor((3*Math.floor((y+4900+Math.floor((m-14)/12))/100))/4)
+    +d-32075;
+  let l=jd-1948440+10632;
+  const n=Math.floor((l-1)/10631);
+  l=l-10631*n+354;
+  const j=(Math.floor((10985-l)/5316))*(Math.floor((50*l)/17719))+(Math.floor(l/5670))*(Math.floor((43*l)/15238));
+  l=l-(Math.floor((30-j)/15))*(Math.floor((17719*j)/50))-(Math.floor(j/16))*(Math.floor((15238*j)/43))+29;
+  const hm=Math.floor((24*l)/709);
+  const hd=l-Math.floor((709*hm)/24);
+  const hy=30*n+j-30;
+  return{y:hy,m:hm,d:hd};
+}
+// 28-day skeleton for a block starting sy/sm/sd (1-indexed month), matching
+// DEFAULT_initialSchedule's row shape with every data slot left empty.
+// Thu/Fri/Sat = weekend, matching that same dataset's convention.
+function buildBlockSkeleton(sy,sm,sd){
+  const start=new Date(sy,sm-1,sd);
+  const days=[];
+  for(let i=0;i<28;i++){
+    const dt=new Date(start);dt.setDate(start.getDate()+i);
+    const dayAbbr=WEEKDAY_ABBR[dt.getDay()];
+    const h=gregorianToHijri(dt.getFullYear(),dt.getMonth()+1,dt.getDate());
+    days.push({
+      date:`${GREG_MONTHS[dt.getMonth()]} ${dt.getDate()}`,
+      greg:`${String(dt.getDate()).padStart(2,"0")}/${String(dt.getMonth()+1).padStart(2,"0")}`,
+      hijri:`${String(h.d).padStart(2,"0")} ${HIJRI_MONTHS_ABBR[h.m-1]}`,
+      day:dayAbbr,
+      type:(dayAbbr==="Thu"||dayAbbr==="Fri"||dayAbbr==="Sat")?"WE":"WD",
+      SO:[],NICU:[],PICU:[],PMW:[],DC_NICU:[],DC_PMW:[],
+    });
+  }
+  return days;
+}
+// Human-readable range strings for the app header ("05/07/2026 – 01/08/2026
+// · 20 Muharram – 17 Safar 1448" style).
+function blockRangeLabels(sy,sm,sd){
+  const start=new Date(sy,sm-1,sd);
+  const end=new Date(start);end.setDate(start.getDate()+27);
+  const pad=n=>String(n).padStart(2,"0");
+  const gregRange=`${pad(start.getDate())}/${pad(start.getMonth()+1)}/${start.getFullYear()} – ${pad(end.getDate())}/${pad(end.getMonth()+1)}/${end.getFullYear()}`;
+  const hs=gregorianToHijri(start.getFullYear(),start.getMonth()+1,start.getDate());
+  const he=gregorianToHijri(end.getFullYear(),end.getMonth()+1,end.getDate());
+  const hijriRange=hs.y===he.y
+    ?`${hs.d} ${HIJRI_MONTHS_FULL[hs.m-1]} – ${he.d} ${HIJRI_MONTHS_FULL[he.m-1]} ${he.y}`
+    :`${hs.d} ${HIJRI_MONTHS_FULL[hs.m-1]} ${hs.y} – ${he.d} ${HIJRI_MONTHS_FULL[he.m-1]} ${he.y}`;
+  return{gregRange,hijriRange};
+}
+// Compact range strings matching block11_template.docx's header2.xml literal
+// style ("07/06/2026-04/07/2026" / "21-12-1447 to 19-01-1448").
+function blockRangeCompact(sy,sm,sd){
+  const start=new Date(sy,sm-1,sd);
+  const end=new Date(start);end.setDate(start.getDate()+27);
+  const pad=n=>String(n).padStart(2,"0");
+  const gregRangeCompact=`${pad(start.getDate())}/${pad(start.getMonth()+1)}/${start.getFullYear()}-${pad(end.getDate())}/${pad(end.getMonth()+1)}/${end.getFullYear()}`;
+  const hs=gregorianToHijri(start.getFullYear(),start.getMonth()+1,start.getDate());
+  const he=gregorianToHijri(end.getFullYear(),end.getMonth()+1,end.getDate());
+  const hijriRangeCompact=`${pad(hs.d)}-${pad(hs.m)}-${hs.y} to ${pad(he.d)}-${pad(he.m)}-${he.y}`;
+  return{gregRangeCompact,hijriRangeCompact};
+}
+// Rotation-code bases that mean "not on the pediatric ward on-call roster
+// that block" -- vacation, elective, ER, and PHC (an off-site primary-care
+// clinic rotation). Verified against Block 11's actual roster: cross-checking
+// every MASTER_ROTA entry's block11 code against who's really in
+// DEFAULT_residentProfiles shows these 4 codes are excluded with zero
+// exceptions, while subspecialty electives (CARDIO/ENDO/PULMO/ID/HEMATO/...),
+// RESEARCH, ANESSIM (anesthesia sim), and WBC (well-baby clinic) all have
+// residents who DO take call that block -- so those are intentionally left
+// includable rather than guessed at. (Two Block-11-only exceptions, Maab and
+// A.Marzooq, are excluded via a separate manual `excl11`/excludedFromBlock11
+// flag that's Block-11-specific and doesn't carry over to other blocks.)
+const EXCLUDED_ROTATION_BASES=new Set(["V","ELECTIVE","ER","PHC"]);
+// Active roster for a given block number, derived from MASTER_ROTA's
+// per-block rotation codes (b[blockNumber-1]), auto-excluding vacation/
+// elective/ER/PHC per EXCLUDED_ROTATION_BASES above. Only valid for blocks
+// 1-13 (MASTER_ROTA's own range); there's no cross-year data to draw from
+// beyond that.
+function deriveBlockRoster(blockNumber){
+  const idx=blockNumber-1;
+  if(idx<0||idx>12)return[];
+  return MASTER_ROTA
+    .filter(r=>{
+      const code=r.b[idx];
+      if(!code)return false;
+      const base=code.replace("/V","").split("/")[0];
+      return !EXCLUDED_ROTATION_BASES.has(base);
+    })
+    .map(r=>({name:r.name,level:levelMap[r.name]||r.lv,rotation:r.b[idx]}))
+    .sort((a,b)=>a.name.localeCompare(b.name));
+}
+// Which of the 4 block-weeks a given 0-based day index falls in ("W1".."W4").
+// Block-agnostic replacement for getWeek() (which hardcodes Block 11's July
+// dates) -- the draft editor drives its vacation checks off this instead.
+function draftWeekOf(dayIdx){return "W"+(Math.floor(dayIdx/7)+1);}
+// Is `name` on vacation on draft day `dayIdx`, per the chosen block's
+// BLOCK_VACATIONS entry (which is Excel-derived, verified in sync).
+function draftOnVacation(blockNumber,name,dayIdx){
+  const vac=(BLOCK_VACATIONS[blockNumber]||{})[name]||[];
+  return vac.includes(draftWeekOf(dayIdx));
+}
+// Is `name` marked as not wanting a call on this exact date, per the unified
+// unwantedDaysByBlock Firestore data (UNWANTED_BY_BLOCK[blockNumber][name]).
+function draftUnwantedDay(blockNumber,name,date){
+  const list=(UNWANTED_BY_BLOCK[String(blockNumber)]||{})[name]||[];
+  return list.includes(date);
+}
+// Warnings for placing `name` into (dayIdx, slot) of the draft `days`.
+// Self-contained: uses BLOCK_VACATIONS[blockNumber]/UNWANTED_BY_BLOCK[blockNumber]
+// + the standing per-resident constraint Sets (which are block-independent
+// daytime-unit rules) rather than the Block-11-bound module globals
+// (vacationWeeks/unwantedDays/getWeek).
+function draftWarnings(days,blockNumber,name,dayIdx,slot){
+  const warns=[];
+  const row=days[dayIdx];
+  const isDC=dcSlots.includes(slot);
+  const max=isDC?(dcSlotMax[slot]||1):(slotMax[slot]||2);
+  if((row[slot]||[]).length>max)warns.push(`Capacity: ${isDC?dcSlotLabel[slot]:slotLabel[slot]} on ${row.date} already has ${row[slot].length} (max ${max}).`);
+  if(draftOnVacation(blockNumber,name,dayIdx))warns.push(`Vacation: ${name} is on leave during ${draftWeekOf(dayIdx)} (${row.date}).`);
+  if(draftUnwantedDay(blockNumber,name,row.date))warns.push(`Unwanted day: ${name} marked ${row.date} as unwanted.`);
+  if(!isDC){
+    if(r1Res.has(name)&&dayIdx<3)warns.push(`R1 rule: ${name} should not cover the first 3 days.`);
+    if(noSaturdayRes.has(name)&&row.day==="Sat")warns.push(`No Saturday: ${name} should not cover Saturday.`);
+    if(noMondayRes.has(name)&&row.day==="Mon")warns.push(`No Monday: ${name} should not cover Monday.`);
+    if(noSundayRes.has(name)&&row.day==="Sun")warns.push(`No Sunday: ${name} should not cover Sunday.`);
+    if(slot==="NICU"&&nicuUnit.has(name)){const o=(row.NICU||[]).filter(n=>n!==name&&nicuUnit.has(n));if(o.length)warns.push(`Same NICU unit: ${name} and ${o.join(", ")} both on ${row.date}.`);}
+    if(slot==="PICU"&&picuUnit.has(name)){const o=(row.PICU||[]).filter(n=>n!==name&&picuUnit.has(n));if(o.length&&row.day!=="Thu"&&row.day!=="Fri")warns.push(`Same PICU unit: ${name} and ${o.join(", ")} both on ${row.date}.`);}
+    // 4-day gap between this resident's on-call days (main slots only)
+    const callDays=days.flatMap((r,i)=>slots.some(s=>(r[s]||[]).includes(name))?[i]:[]).sort((a,b)=>a-b);
+    for(let i=1;i<callDays.length;i++){const gap=callDays[i]-callDays[i-1];if(gap<4)warns.push(`Gap: ${name} only ${gap} day(s) between ${days[callDays[i-1]].date} and ${days[callDays[i]].date} (min 4).`);}
+  }
+  return warns;
+}
+// Buckets a per-block Master Rota rotation code (e.g. "GP/V", "NICU", "ANESSIM")
+// into one of the same 4 buckets COVERAGE_TEAMS/getAvailability use, so the
+// draft's availability panel can group by team without depending on the
+// live (Block-11-specific) rotationMap.
+function classifyRotation(rot){
+  const base=(rot||"").replace("/V","").split("/")[0];
+  if(base==="NICU")return"NICU";
+  if(base==="PICU")return"PICU";
+  if(base==="GP")return"GP";
+  return"OTHER";
+}
+// { name: {main, dc} } call counts across the whole draft -- feeds DraftTracker.
+function draftCallCounts(days){
+  const counts={};
+  days.forEach(row=>{
+    [...row.SO,...row.NICU,...row.PICU,...row.PMW].forEach(n=>{
+      counts[n]=counts[n]||{main:0,dc:0};counts[n].main++;
+    });
+    [...(row.DC_PMW||[]),...(row.DC_NICU||[])].forEach(n=>{
+      counts[n]=counts[n]||{main:0,dc:0};counts[n].dc++;
+    });
+  });
+  return counts;
+}
+// Per-unit (NICU/PICU/GP) level breakdown of who's available the day after
+// dayIdx-1 -- draft equivalent of getAvailability(), grouping by each
+// roster member's per-block rotation (classifyRotation) instead of the
+// live rotationMap/filterGroups, and by BLOCK_VACATIONS instead of
+// vacationWeeks (which is Block-11-specific).
+function getDraftAvailability(days,roster,blockNumber,dayIdx){
+  if(dayIdx===0)return null;
+  const prev=days[dayIdx-1];
+  const postCall=new Set([...prev.SO,...prev.NICU,...prev.PICU,...prev.PMW]);
+  function unitBreakdown(members){
+    const groups={};
+    members.forEach(r=>{
+      const lv=r.level||"?";
+      if(!groups[lv])groups[lv]={avail:0,total:0,postCall:[],vacation:[]};
+      groups[lv].total++;
+      if(postCall.has(r.name))groups[lv].postCall.push(r.name);
+      else if(draftOnVacation(blockNumber,r.name,dayIdx))groups[lv].vacation.push(r.name);
+      else groups[lv].avail++;
+    });
+    return groups;
+  }
+  function unitTotal(groups){
+    let a=0,t=0;Object.values(groups).forEach(g=>{a+=g.avail;t+=g.total;});return{avail:a,total:t};
+  }
+  const byTeam={NICU:[],PICU:[],GP:[]};
+  roster.forEach(r=>{const k=classifyRotation(r.rotation);if(byTeam[k])byTeam[k].push(r);});
+  const nicu=unitBreakdown(byTeam.NICU),picu=unitBreakdown(byTeam.PICU),gp=unitBreakdown(byTeam.GP);
+  return{nicu,picu,gp,nicuTot:unitTotal(nicu),picuTot:unitTotal(picu),gpTot:unitTotal(gp)};
+}
 
 function MasterRotaPage(){
   const[search,setSearch]=useState("");
@@ -2039,6 +2282,754 @@ function MobileDayCard({row, selected, addTarget, setAddTarget, setAddSearch,
   );
 }
 
+// ── Unwanted Days -- the single place every block's unwanted-day requests
+// live, instead of scattered per-block CSV exports. Pick a block, see every
+// resident on that block's active roster with their unwanted dates as
+// removable chips, and (admin) add a new one from that block's own 28 dates.
+// This is what draftWarnings/draftUnwantedDay read (via the live
+// UNWANTED_BY_BLOCK mirror) to flag a scheduling conflict in the New Block tab. ──
+function UnwantedDaysPage({isAdmin,unwantedByBlock,writeUnwantedForBlock,defaultBlock}){
+  const[blockNumber,setBlockNumber]=useState(defaultBlock||11);
+  const[addFor,setAddFor]=useState(null); // resident name whose "add date" picker is open
+  const[pickDate,setPickDate]=useState("");
+
+  const bd=BLOCK_DATES.find(b=>b.n===blockNumber);
+  const dayOptions=bd?buildBlockSkeleton(bd.sy,bd.sm,bd.sd).map(d=>d.date):[];
+  const roster=deriveBlockRoster(blockNumber);
+  const days=unwantedByBlock[String(blockNumber)]||{};
+
+  const addDate=(name,date)=>{
+    if(!date)return;
+    const cur=days[name]||[];
+    if(cur.includes(date))return;
+    const order=dayOptions.length?dayOptions:cur;
+    const next=[...cur,date].sort((a,b)=>order.indexOf(a)-order.indexOf(b));
+    writeUnwantedForBlock(blockNumber,{...days,[name]:next});
+    setAddFor(null);setPickDate("");
+  };
+  const removeDate=(name,date)=>{
+    writeUnwantedForBlock(blockNumber,{...days,[name]:(days[name]||[]).filter(d=>d!==date)});
+  };
+
+  const inputStyle={padding:"6px 9px",fontSize:12.5,borderRadius:6,border:"1.5px solid #cbd5e1",outline:"none",width:70};
+
+  return(
+    <div style={{paddingBottom:20}}>
+      <div style={{background:"#fff",borderRadius:8,padding:14,marginBottom:12,border:"1px solid #e2e8f0"}}>
+        <div style={{fontSize:14,fontWeight:800,color:"#1e3a5f",marginBottom:2}}>🚫 Unwanted Days</div>
+        <div style={{fontSize:11.5,color:"#64748b",marginBottom:10}}>
+          One place for every block's unwanted-call-day requests. The New Block draft
+          reads this directly and warns if a resident is scheduled on a date they marked here.
+        </div>
+        <div style={{display:"flex",alignItems:"flex-end",gap:14,flexWrap:"wrap"}}>
+          <div>
+            <label style={{fontSize:10,fontWeight:700,color:"#64748b",letterSpacing:"0.04em",textTransform:"uppercase",display:"block",marginBottom:3}}>Block #</label>
+            <input type="number" style={inputStyle} value={blockNumber} onChange={e=>setBlockNumber(Number(e.target.value)||0)}/>
+          </div>
+          {(blockNumber<1||blockNumber>13)&&<span style={{fontSize:11,color:"#b45309"}}>⚠ No Master Rota data for this block.</span>}
+          {isAdmin&&!unwantedByBlock["11"]&&!unwantedByBlock["12"]&&(
+            <button onClick={()=>{
+                writeUnwantedForBlock(11,DEFAULT_UNWANTED_BLOCK11);
+                writeUnwantedForBlock(12,DEFAULT_UNWANTED_BLOCK12);
+              }}
+              style={{fontSize:11,fontWeight:700,padding:"6px 12px",borderRadius:6,border:"1px solid #a7f3d0",
+                background:"#ecfdf5",color:"#065f46",cursor:"pointer"}}>
+              🌱 Seed Block 11 + 12 (one-time import)
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div style={{background:"#fff",borderRadius:8,border:"1px solid #e2e8f0",overflow:"hidden"}}>
+        {roster.length===0&&<div style={{padding:14,fontSize:12,color:"#94a3b8"}}>No roster for this block.</div>}
+        {roster.map((r,i)=>{
+          const dates=days[r.name]||[];
+          const open=addFor===r.name;
+          const remaining=dayOptions.filter(d=>!dates.includes(d));
+          return(
+            <div key={r.name} style={{padding:"8px 12px",borderBottom:"1px solid #f1f5f9",background:i%2===0?"#fff":"#f9fafb"}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                <span style={{fontSize:12,fontWeight:700,color:"#1e293b",minWidth:80}}>{r.name}</span>
+                <span style={{fontSize:9,color:"#94a3b8"}}>{r.level} · {r.rotation}</span>
+                <div style={{display:"flex",gap:5,flexWrap:"wrap",marginLeft:"auto"}}>
+                  {dates.length===0&&<span style={{fontSize:11,color:"#cbd5e1"}}>none marked</span>}
+                  {dates.map(d=>(
+                    <span key={d} style={{display:"inline-flex",alignItems:"center",gap:3,padding:"2px 6px",borderRadius:4,
+                      fontSize:11,fontWeight:600,background:"#fff7ed",border:"1px solid #fdba74",color:"#9a3412"}}>
+                      {d}
+                      {isAdmin&&<span onClick={()=>removeDate(r.name,d)} style={{cursor:"pointer",color:"#dc2626",fontWeight:800}}>×</span>}
+                    </span>
+                  ))}
+                  {isAdmin&&(
+                    <button onClick={()=>{setAddFor(open?null:r.name);setPickDate("");}}
+                      style={{fontSize:11,padding:"2px 7px",borderRadius:4,border:"1px dashed #94a3b8",background:open?"#e0e7ff":"#f8fafc",color:"#475569",cursor:"pointer"}}>
+                      {open?"×":"+ add"}
+                    </button>
+                  )}
+                </div>
+              </div>
+              {open&&(
+                <div style={{marginTop:6,display:"flex",gap:6,alignItems:"center"}}>
+                  <select value={pickDate} onChange={e=>setPickDate(e.target.value)}
+                    style={{fontSize:11.5,padding:"4px 6px",borderRadius:5,border:"1px solid #cbd5e1"}}>
+                    <option value="">Pick a date…</option>
+                    {remaining.map(d=>(<option key={d} value={d}>{d}</option>))}
+                  </select>
+                  <button onClick={()=>addDate(r.name,pickDate)} disabled={!pickDate}
+                    style={{fontSize:11,fontWeight:700,padding:"4px 10px",borderRadius:5,border:"none",cursor:pickDate?"pointer":"default",
+                      background:pickDate?"#1e3a5f":"#e2e8f0",color:pickDate?"#fff":"#94a3b8"}}>
+                    Add
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Draft Resident Tracker -- sidebar of on-call counts, draft equivalent of
+// ResidentTracker but grouped from `roster` (the chosen block's Master Rota
+// roster) and counted from `days` directly, since residentProfiles' call
+// targets are Block-11-specific and don't apply to a future block. ──
+function DraftTracker({roster,days,spotlight,setSpotlight}){
+  const counts=draftCallCounts(days);
+  const byLevel={};
+  roster.forEach(r=>{(byLevel[r.level]=byLevel[r.level]||[]).push(r);});
+  return(
+    <div onClick={e=>e.stopPropagation()} style={{
+      width:186,flexShrink:0,background:"#fff",borderRadius:8,
+      border:"1px solid #e2e8f0",boxShadow:"0 1px 4px rgba(0,0,0,0.06)",
+      overflow:"hidden",alignSelf:"flex-start",display:"flex",flexDirection:"column",
+      maxHeight:"calc(100vh - 150px)",position:"sticky",top:8,
+    }}>
+      <div style={{background:"#1e293b",color:"#94a3b8",fontSize:9.5,fontWeight:700,
+        letterSpacing:"0.08em",textTransform:"uppercase",padding:"6px 10px",flexShrink:0}}>
+        👥 On-Call Count
+      </div>
+      <div style={{overflowY:"auto",flex:1}}>
+        {["R4","R3","R2","R1","EXT"].filter(lvl=>byLevel[lvl]?.length).map(lvl=>{
+          const lc=levelColors[lvl];
+          return(
+            <div key={lvl}>
+              <div style={{background:lc.light,padding:"3px 9px",fontSize:9,fontWeight:800,
+                color:lc.hdr,borderTop:`1px solid ${lc.hdr}33`,borderBottom:`1px solid ${lc.hdr}33`,
+                letterSpacing:"0.08em",textTransform:"uppercase"}}>
+                {lvl}
+              </div>
+              {byLevel[lvl].map(r=>{
+                const c=counts[r.name]||{main:0,dc:0};
+                const isLit=spotlight===r.name;
+                return(
+                  <div key={r.name} onClick={()=>setSpotlight(isLit?null:r.name)} style={{
+                    padding:"5px 9px",cursor:"pointer",borderBottom:"1px solid #f1f5f9",
+                    background:isLit?lc.light:"transparent",
+                    borderLeft:`3px solid ${isLit?lc.hdr:"transparent"}`,transition:"all 0.1s",
+                  }}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <span style={{fontSize:10.5,fontWeight:isLit?800:600,color:isLit?lc.hdr:"#1e293b",lineHeight:1.2}}>{r.name}</span>
+                      <span style={{fontSize:10,fontWeight:700,color:"#64748b",background:"#f8fafc",
+                        border:"1px solid #e2e8f0",borderRadius:3,padding:"0 4px",lineHeight:"16px"}}>{c.main}</span>
+                    </div>
+                    {c.dc>0&&(
+                      <div style={{marginTop:2,display:"flex",alignItems:"center",gap:3}}>
+                        <span style={{fontSize:8.5,fontWeight:700,color:"#b45309",background:"#fef3c7",
+                          border:"1px solid #fcd34d",borderRadius:3,padding:"0 4px",lineHeight:"14px"}}>+{c.dc} DC</span>
+                      </div>
+                    )}
+                    {isLit&&<div style={{marginTop:3,fontSize:9,color:lc.tx,opacity:0.8}}>{r.rotation}</div>}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+        {roster.length===0&&<div style={{padding:10,fontSize:11,color:"#94a3b8"}}>No roster data.</div>}
+      </div>
+      <div style={{padding:"5px 9px",borderTop:"1px solid #f1f5f9",background:"#f8fafc",
+        fontSize:9,color:"#94a3b8",textAlign:"center",flexShrink:0}}>
+        Click resident → view profile
+      </div>
+    </div>
+  );
+}
+
+// ── Draft Availability -- sidebar, draft equivalent of AvailabilityPanel,
+// driven by getDraftAvailability (BLOCK_VACATIONS + per-block rotation
+// buckets) instead of the live vacationWeeks/rotationMap. ──
+function DraftAvailability({days,roster,blockNumber}){
+  const[expanded,setExpanded]=useState(null);
+  const lvOrder=["R4","R3","R2","R1"];
+  const units=[
+    {key:"nicu",label:"NICU",totKey:"nicuTot",hdr:"#1d4ed8",light:"#dbeafe"},
+    {key:"picu",label:"PICU",totKey:"picuTot",hdr:"#9d174d",light:"#fce7f3"},
+    {key:"gp",  label:"GP / PMW",totKey:"gpTot", hdr:"#065f46",light:"#d1fae5"},
+  ];
+  function chip(avail,total,postCall,vacation){
+    const pct=total?avail/total:1;
+    const sc=pct>=0.75?"#166534":pct>=0.5?"#b45309":"#991b1b";
+    const sb=pct>=0.75?"#dcfce7":pct>=0.5?"#fef3c7":"#fef2f2";
+    const parts=[];
+    if(postCall.length)parts.push(`Post-call: ${postCall.join(", ")}`);
+    if(vacation.length)parts.push(`Vacation: ${vacation.join(", ")}`);
+    return{sc,sb,tip:parts.join(" | ")||"All available"};
+  }
+  return(
+    <div onClick={e=>e.stopPropagation()} style={{
+      width:210,flexShrink:0,background:"#fff",borderRadius:8,
+      border:"1px solid #e2e8f0",boxShadow:"0 1px 4px rgba(0,0,0,0.06)",
+      overflow:"hidden",alignSelf:"flex-start",display:"flex",flexDirection:"column",
+      maxHeight:"calc(100vh - 140px)",position:"sticky",top:8
+    }}>
+      <div style={{background:"#1e293b",color:"#94a3b8",fontSize:9.5,fontWeight:700,
+        letterSpacing:"0.08em",textTransform:"uppercase",padding:"6px 10px",flexShrink:0}}>
+        📊 Next-Day Availability
+      </div>
+      <div style={{fontSize:9,color:"#94a3b8",padding:"4px 10px",background:"#f8fafc",
+        borderBottom:"1px solid #e2e8f0",flexShrink:0}}>
+        Click a day to see per-unit breakdown by level
+      </div>
+      <div style={{overflowY:"auto",flex:1}}>
+        {days.slice(0,-1).map((row,i)=>{
+          const av=getDraftAvailability(days,roster,blockNumber,i+1);
+          if(!av)return null;
+          const next=days[i+1];
+          const isOpen=expanded===i;
+          return(
+            <div key={row.date} style={{borderBottom:"1px solid #f1f5f9"}}>
+              <div onClick={()=>setExpanded(isOpen?null:i)} style={{
+                display:"flex",alignItems:"center",justifyContent:"space-between",
+                padding:"5px 8px",cursor:"pointer",
+                background:isOpen?"#f0f9ff":"#fff",
+                borderLeft:isOpen?"3px solid #0284c7":"3px solid transparent",
+                transition:"background 0.1s"
+              }}>
+                <div style={{fontSize:9.5,fontWeight:700,color:isOpen?"#0369a1":"#1e293b"}}>
+                  {row.date}<span style={{color:"#94a3b8",fontWeight:400,margin:"0 3px"}}>→</span>{next.date}
+                </div>
+                <div style={{display:"flex",gap:3,alignItems:"center"}}>
+                  {units.map(u=>{
+                    const t=av[u.totKey];
+                    const pct=t.total?t.avail/t.total:1;
+                    const sc=pct>=0.75?"#166534":pct>=0.5?"#b45309":"#991b1b";
+                    const sb=pct>=0.75?"#dcfce7":pct>=0.5?"#fef3c7":"#fef2f2";
+                    return(
+                      <span key={u.key} style={{fontSize:8.5,fontWeight:700,color:sc,background:sb,
+                        borderRadius:3,padding:"0 4px",border:`1px solid ${sc}44`,lineHeight:"16px"}}>
+                        {t.avail}/{t.total}
+                      </span>
+                    );
+                  })}
+                  <span style={{fontSize:9,color:"#94a3b8",marginLeft:2}}>{isOpen?"▲":"▼"}</span>
+                </div>
+              </div>
+              {isOpen&&(
+                <div style={{background:"#f8fafc",padding:"6px 8px",display:"flex",flexDirection:"column",gap:6}}>
+                  {units.map(u=>{
+                    const groups=av[u.key];
+                    const levels=lvOrder.filter(lv=>groups[lv]);
+                    return(
+                      <div key={u.key}>
+                        <div style={{fontSize:9,fontWeight:700,color:"#fff",background:u.hdr,
+                          borderRadius:3,padding:"1px 6px",marginBottom:3,display:"inline-block",
+                          letterSpacing:"0.05em"}}>
+                          {u.label}
+                        </div>
+                        {levels.length===0
+                          ?<div style={{fontSize:9,color:"#94a3b8",paddingLeft:4}}>No residents</div>
+                          :<div style={{display:"flex",flexDirection:"column",gap:2}}>
+                            {levels.map(lv=>{
+                              const g=groups[lv];
+                              const {sc,sb,tip}=chip(g.avail,g.total,g.postCall,g.vacation);
+                              return(
+                                <div key={lv} title={tip} style={{
+                                  display:"flex",alignItems:"center",gap:4,
+                                  background:sb,borderRadius:3,padding:"2px 6px",
+                                  border:`1px solid ${sc}33`,cursor:"default"
+                                }}>
+                                  <span style={{fontSize:9,fontWeight:800,color:sc,minWidth:16}}>{lv}</span>
+                                  <span style={{fontSize:9,fontWeight:700,color:sc}}>{g.avail}/{g.total}</span>
+                                  {(g.postCall.length>0||g.vacation.length>0)&&(
+                                    <span style={{fontSize:8.5,color:sc,opacity:0.75,marginLeft:"auto",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:90}}>
+                                      {[...g.postCall,...g.vacation].join(", ")}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        }
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Draft Resident Panel -- draft equivalent of ResidentPanel: shows a
+// resident's profile (level/rotation for THIS block + leave weeks from
+// BLOCK_VACATIONS) and their call list with gap indicators, with a remove
+// button per call (wired to the draft's removeFromSlot). No move-by-click
+// flow (that's the Schedule tab's job) -- the draft's own +/× pickers
+// already handle moving a resident (remove then re-add elsewhere). ──
+function DraftResidentPanel({name,roster,days,blockNumber,onClose,onRemove}){
+  const profile=roster.find(r=>r.name===name);
+  const level=profile?.level||"";
+  const lc=levelColors[level]||{hdr:"#1e293b",light:"#f8fafc",tx:"#334155"};
+  const dateIdx={};days.forEach((r,i)=>{dateIdx[r.date]=i;});
+  const calls=days.flatMap((row,i)=>{
+    let slot=null;
+    if(row.SO.includes(name))slot="SO";
+    if(row.NICU.includes(name))slot="NICU";
+    if(row.PICU.includes(name))slot="PICU";
+    if(row.PMW.includes(name))slot="PMW";
+    return slot?[{date:row.date,day:row.day,type:row.type,slot,dayIdx:i}]:[];
+  });
+  const dcCalls=days.flatMap((row,i)=>{
+    const entries=[];
+    if((row.DC_PMW||[]).includes(name))entries.push({date:row.date,day:row.day,slot:"DC_PMW",dayIdx:i});
+    if((row.DC_NICU||[]).includes(name))entries.push({date:row.date,day:row.day,slot:"DC_NICU",dayIdx:i});
+    return entries;
+  });
+  const wdCount=calls.filter(c=>c.type==="WD").length;
+  const weCount=calls.filter(c=>c.type==="WE").length;
+  const leaveWeeks=(BLOCK_VACATIONS[blockNumber]||{})[name]||[];
+
+  return(
+    <div onClick={e=>e.stopPropagation()} style={{width:255,flexShrink:0,background:"#fff",borderRadius:8,
+      border:`2px solid ${lc.hdr}`,boxShadow:"0 4px 16px rgba(0,0,0,0.14)",overflow:"hidden",
+      position:"sticky",top:8,alignSelf:"flex-start"}}>
+      <div style={{background:lc.hdr,padding:"8px 12px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div>
+          <span style={{fontSize:13,fontWeight:800,color:"#fff"}}>{name}</span>
+          <span style={{fontSize:10,color:"#94a3b8",marginLeft:6}}>{level} · {profile?.rotation||"—"}</span>
+        </div>
+        <button onClick={onClose} style={{background:"none",border:"none",color:"#94a3b8",cursor:"pointer",fontSize:18,lineHeight:1,padding:"0 2px"}}>×</button>
+      </div>
+      <div style={{background:lc.light,padding:"4px 12px",fontSize:11,color:lc.tx,fontWeight:700,borderBottom:`1px solid ${lc.hdr}33`}}>
+        {calls.length} call{calls.length!==1?"s":""} · {wdCount} WD + {weCount} WE{dcCalls.length?` · ${dcCalls.length} DC`:""}
+      </div>
+      {leaveWeeks.length>0&&(
+        <div style={{padding:"6px 10px",borderBottom:"1px solid #f1f5f9"}}>
+          <span style={{fontSize:10,background:"#fffbeb",border:"1px solid #fcd34d",color:"#92400e",borderRadius:3,padding:"1px 6px"}}>
+            🏖 On leave: {leaveWeeks.join("+")}
+          </span>
+        </div>
+      )}
+      <div style={{maxHeight:300,overflowY:"auto"}}>
+        {calls.length===0?(
+          <div style={{padding:"10px 12px",fontSize:11,color:"#9ca3af",fontStyle:"italic"}}>No calls assigned yet.</div>
+        ):calls.map((c,i)=>{
+          const gapNum=i===0?null:(c.dayIdx-calls[i-1].dayIdx);
+          const gapOk=gapNum===null||gapNum>=4;
+          const gapWarn=gapNum===3;
+          const stc=slotTagColors[slotLabel[c.slot]]||{bg:"#f1f5f9",tx:"#374151"};
+          return(
+            <div key={i} style={{padding:"5px 10px",background:i%2===0?"#fff":"#f9fafb",
+              borderBottom:"1px solid #f1f5f9",display:"flex",alignItems:"center",gap:5}}>
+              <span style={{fontSize:9.5,color:"#9ca3af",width:14,textAlign:"center",fontWeight:700}}>{i+1}</span>
+              <span style={{fontSize:11,fontWeight:700,color:"#1e293b",minWidth:38}}>{c.date}</span>
+              <span style={{fontSize:10,color:c.type==="WE"?"#0369a1":"#6b7280",fontWeight:c.type==="WE"?700:400,minWidth:26}}>{c.day}</span>
+              <span style={{fontSize:10,background:stc.bg,color:stc.tx,borderRadius:3,padding:"1px 5px",fontWeight:600,flex:1,textAlign:"center"}}>{slotLabel[c.slot]}</span>
+              {gapNum!==null&&(
+                <span style={{fontSize:9.5,fontWeight:700,minWidth:22,textAlign:"right",color:gapOk?"#166534":gapWarn?"#d97706":"#dc2626"}}>
+                  {gapNum}d {gapOk?"":gapWarn?"⚠️":"❌"}
+                </span>
+              )}
+              <button onClick={()=>onRemove(c.dayIdx,c.slot,name)} title="Remove this call"
+                style={{fontSize:9,fontWeight:700,color:"#dc2626",background:"#fef2f2",border:"1px solid #fca5a5",
+                  borderRadius:3,padding:"1px 5px",cursor:"pointer",lineHeight:1.4}}>
+                ✕
+              </button>
+            </div>
+          );
+        })}
+        {dcCalls.map((c,i)=>(
+          <div key={"dc"+i} style={{padding:"5px 10px",background:"#fffbeb",borderBottom:"1px solid #fde68a",display:"flex",alignItems:"center",gap:5}}>
+            <span style={{fontSize:9.5,color:"#b45309",width:14,textAlign:"center",fontWeight:700}}>·</span>
+            <span style={{fontSize:11,fontWeight:700,color:"#78350f",minWidth:38}}>{c.date}</span>
+            <span style={{fontSize:10,color:"#92400e",minWidth:26}}>{c.day}</span>
+            <span style={{fontSize:10,background:"#fed7aa",color:"#9a3412",borderRadius:3,padding:"1px 5px",fontWeight:600,flex:1,textAlign:"center"}}>{dcSlotLabel[c.slot]}</span>
+            <button onClick={()=>onRemove(c.dayIdx,c.slot,name)} title="Remove this call"
+              style={{fontSize:9,fontWeight:700,color:"#dc2626",background:"#fef2f2",border:"1px solid #fca5a5",
+                borderRadius:3,padding:"1px 5px",cursor:"pointer",lineHeight:1.4}}>
+              ✕
+            </button>
+          </div>
+        ))}
+      </div>
+      <div style={{padding:"4px 10px",background:"#f8fafc",borderTop:"1px solid #e2e8f0",fontSize:9.5,color:"#9ca3af",textAlign:"center"}}>
+        ✕ removes a call · use the day view's + picker to add elsewhere
+      </div>
+    </div>
+  );
+}
+
+// ── New Block Page (admin-only: draft the next block before publishing) ──────
+function NewBlockPage({schedMeta,draft,writeDraft,clearDraft,onPublish,isAdmin}){
+  const liveBlockNumber=schedMeta?.blockNumber||11;
+  const defaultBd=BLOCK_DATES.find(b=>b.n===liveBlockNumber+1);
+  const[blockNumber,setBlockNumber]=useState(draft?.blockNumber||liveBlockNumber+1);
+  const[startY,setStartY]=useState(draft?.startDate?.y||defaultBd?.sy||liveBlockNumber);
+  const[startM,setStartM]=useState(draft?.startDate?.m||defaultBd?.sm||1);
+  const[startD,setStartD]=useState(draft?.startDate?.d||defaultBd?.sd||1);
+  const[actingChief,setActingChief]=useState(draft?.actingChief||schedMeta?.actingChief||"");
+  const[excluded,setExcluded]=useState(new Set());
+  const[saving,setSaving]=useState(false);
+  const[publishing,setPublishing]=useState(false);
+  const[err,setErr]=useState("");
+  // Editor state: which day is open, and which slot's add-picker is expanded.
+  const[dayIdx,setDayIdx]=useState(0);
+  const[addSlot,setAddSlot]=useState(null); // slot key with its picker open, or null
+  const[pickSearch,setPickSearch]=useState("");
+  const[fullView,setFullView]=useState(false); // Day View vs Full Schedule, like the Schedule tab
+  const[spotlight,setSpotlight]=useState(null); // resident name whose profile panel is open
+
+  // Picking a new target block re-seeds the date fields from BLOCK_DATES
+  // (only when there's no draft yet for it -- don't clobber a saved draft's dates).
+  const onBlockNumberChange=(n)=>{
+    setBlockNumber(n);
+    if(!draft||draft.blockNumber!==n){
+      const bd=BLOCK_DATES.find(b=>b.n===n);
+      if(bd){setStartY(bd.sy);setStartM(bd.sm);setStartD(bd.sd);}
+    }
+  };
+
+  const rosterAll=deriveBlockRoster(blockNumber);
+  const roster=rosterAll.filter(r=>!excluded.has(r.name));
+
+  const handleGenerate=async()=>{
+    setSaving(true);setErr("");
+    try{
+      const days=buildBlockSkeleton(startY,startM,startD);
+      await writeDraft({blockNumber,startDate:{y:startY,m:startM,d:startD},actingChief,days,roster});
+    }catch(e){setErr(e.message||"Failed to save draft.");}
+    finally{setSaving(false);}
+  };
+  const handleExportDraft=async()=>{
+    if(!draft)return;
+    setErr("");
+    try{
+      await exportDocx(draft.days,{
+        blockNumber:draft.blockNumber,startDate:draft.startDate,actingChief:draft.actingChief,
+        filename:`Block${draft.blockNumber}_Schedule_Draft.docx`,
+      });
+    }catch(e){setErr(e.message||"Export failed.");}
+  };
+  const handlePublish=async()=>{
+    if(!draft)return;
+    if(!window.confirm(`Publish Block ${draft.blockNumber}? This archives the current live schedule (Block ${liveBlockNumber}) and replaces it with this draft. This cannot be undone.`))return;
+    setPublishing(true);setErr("");
+    try{
+      await onPublish(draft);
+    }catch(e){setErr(e.message||"Publish failed.");}
+    finally{setPublishing(false);}
+  };
+
+  // ── Draft slot editing: mutate draft.days and persist the whole draft. ──
+  const draftBlock=draft?.blockNumber;
+  const editRoster=draft?deriveBlockRoster(draftBlock):[];
+  const saveDays=(newDays)=>writeDraft({...draft,days:newDays});
+  const addToSlot=(di,slot,name)=>{
+    const newDays=draft.days.map((r,i)=>i!==di?r:{...r,[slot]:[...(r[slot]||[]),name]});
+    saveDays(newDays);
+    setAddSlot(null);setPickSearch("");
+  };
+  const removeFromSlot=(di,slot,name)=>{
+    const newDays=draft.days.map((r,i)=>i!==di?r:{...r,[slot]:(r[slot]||[]).filter(n=>n!==name)});
+    saveDays(newDays);
+  };
+
+  if(!isAdmin)return null;
+
+  const inputStyle={padding:"6px 9px",fontSize:12.5,borderRadius:6,border:"1.5px solid #cbd5e1",outline:"none",width:90};
+  const labelStyle={fontSize:10,fontWeight:700,color:"#64748b",letterSpacing:"0.04em",textTransform:"uppercase",display:"block",marginBottom:3};
+  const btnStyle={padding:"7px 16px",borderRadius:6,fontSize:12,fontWeight:700,cursor:"pointer",border:"1px solid transparent",boxShadow:"0 1px 3px rgba(0,0,0,0.15)"};
+
+  return(
+    <div style={{paddingBottom:20}}>
+      <div style={{background:"#fff",borderRadius:8,padding:14,marginBottom:12,border:"1px solid #e2e8f0"}}>
+        <div style={{fontSize:14,fontWeight:800,color:"#1e3a5f",marginBottom:2}}>Draft the next block</div>
+        <div style={{fontSize:11.5,color:"#64748b",marginBottom:12}}>
+          Generate the block's 28-day grid, then fill each day's call slots below.
+          Residents on leave that week (from the vacation sheet) are flagged as you pick.
+          Publish when ready to make it the live schedule.
+        </div>
+        <div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:12}}>
+          <div>
+            <label style={labelStyle}>Block #</label>
+            <input type="number" style={{...inputStyle,width:60}} value={blockNumber}
+              onChange={e=>onBlockNumberChange(Number(e.target.value)||0)}/>
+          </div>
+          <div>
+            <label style={labelStyle}>Start date (Y / M / D)</label>
+            <div style={{display:"flex",gap:5}}>
+              <input type="number" style={inputStyle} value={startY} onChange={e=>setStartY(Number(e.target.value)||0)}/>
+              <input type="number" style={{...inputStyle,width:60}} value={startM} onChange={e=>setStartM(Number(e.target.value)||0)}/>
+              <input type="number" style={{...inputStyle,width:60}} value={startD} onChange={e=>setStartD(Number(e.target.value)||0)}/>
+            </div>
+          </div>
+          <div>
+            <label style={labelStyle}>Acting Chief Resident</label>
+            <input style={{...inputStyle,width:200}} value={actingChief} onChange={e=>setActingChief(e.target.value)}/>
+          </div>
+        </div>
+        {(blockNumber<1||blockNumber>13)&&(
+          <div style={{fontSize:11.5,color:"#b45309",marginBottom:10}}>
+            ⚠ No Master Rota data exists for block {blockNumber} -- the roster below will be empty; add residents manually after publishing.
+          </div>
+        )}
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <button onClick={handleGenerate} disabled={saving} style={{...btnStyle,background:saving?"#94a3b8":"#1e3a5f",color:"#fff"}}>
+            {saving?"Saving…":draft?"Regenerate Draft":"Generate Draft"}
+          </button>
+          <button onClick={handleExportDraft} disabled={!draft} style={{...btnStyle,background:draft?"#0f766e":"#e2e8f0",color:draft?"#fff":"#94a3b8"}}>
+            📄 Export Draft DOCX
+          </button>
+          <button onClick={handlePublish} disabled={!draft||publishing} style={{...btnStyle,background:draft?"#991b1b":"#e2e8f0",color:draft?"#fff":"#94a3b8"}}>
+            {publishing?"Publishing…":"🚀 Publish & Archive"}
+          </button>
+          {draft&&<button onClick={()=>clearDraft()} style={{...btnStyle,background:"#fff",color:"#64748b",border:"1px solid #cbd5e1"}}>Discard draft</button>}
+        </div>
+        {err&&<div style={{fontSize:11.5,color:"#dc2626",marginTop:8}}>{err}</div>}
+      </div>
+
+      {!draft&&(
+        <div style={{background:"#fff",borderRadius:8,padding:14,border:"1px solid #e2e8f0",fontSize:12,color:"#64748b"}}>
+          No draft yet — set the block number and start date above, then <strong>Generate Draft</strong> to start filling in the schedule.
+        </div>
+      )}
+
+      {draft&&(()=>{
+        const days=draft.days||[];
+        const di=Math.max(0,Math.min(days.length-1,dayIdx));
+        const row=days[di];
+        if(!row)return null;
+        const week=draftWeekOf(di);
+        const isWE=row.type==="WE";
+        // Day-call slots exist Sun–Thu; Fri/Sat use the merged weekend cell
+        // (no day calls), matching DEFAULT_initialSchedule + exportDocx.
+        const noDayCall=row.day==="Fri"||row.day==="Sat";
+        // Who's on leave this week / marked this exact date unwanted (for the availability strips).
+        const onLeave=editRoster.filter(r=>draftOnVacation(draftBlock,r.name,di)).map(r=>r.name);
+        const unwantedTodayNames=editRoster.filter(r=>draftUnwantedDay(draftBlock,r.name,row.date)).map(r=>r.name);
+        // Names already placed anywhere on this day (avoid double-booking one day).
+        const placedToday=new Set([...slots,...dcSlots].flatMap(s=>row[s]||[]));
+        const go=delta=>{setDayIdx(Math.max(0,Math.min(days.length-1,di+delta)));setAddSlot(null);setPickSearch("");};
+        const renderSlot=(slot,label,hdr,isDC)=>{
+          const names=row[slot]||[];
+          const max=isDC?(dcSlotMax[slot]||1):(slotMax[slot]||2);
+          const open=addSlot===slot;
+          const q=pickSearch.trim().toLowerCase();
+          const options=editRoster
+            .filter(r=>!names.includes(r.name))
+            .filter(r=>!q||r.name.toLowerCase().includes(q)||(r.rotation||"").toLowerCase().includes(q))
+            .sort((a,b)=>{const av=draftOnVacation(draftBlock,a.name,di),bv=draftOnVacation(draftBlock,b.name,di);return av-bv||a.name.localeCompare(b.name);});
+          return(
+            <div key={slot} style={{border:"1px solid #e2e8f0",borderRadius:8,overflow:"hidden",background:"#fff"}}>
+              <div style={{background:hdr,color:"#fff",fontSize:11,fontWeight:700,padding:"5px 9px",display:"flex",justifyContent:"space-between"}}>
+                <span>{label}</span><span style={{opacity:0.8}}>{names.length}/{max}</span>
+              </div>
+              <div style={{padding:8,display:"flex",flexWrap:"wrap",gap:5,alignItems:"center"}}>
+                {names.length===0&&<span style={{color:"#cbd5e1",fontSize:12}}>—</span>}
+                {names.map(n=>{
+                  const vac=draftOnVacation(draftBlock,n,di);
+                  const unwanted=draftUnwantedDay(draftBlock,n,row.date);
+                  return(
+                    <span key={n} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 6px",borderRadius:5,fontSize:11.5,fontWeight:600,
+                      background:vac?"#fef2f2":unwanted?"#fff7ed":"#f1f5f9",border:`1px solid ${vac?"#fca5a5":unwanted?"#fdba74":"#cbd5e1"}`,color:vac?"#991b1b":unwanted?"#9a3412":"#334155"}}>
+                      {vac&&<span title="On leave this week">🌴</span>}
+                      {!vac&&unwanted&&<span title="Marked this day as unwanted">🚫</span>}
+                      {n}
+                      {levelMap[n]&&<span style={{fontSize:9,opacity:0.6}}>·{levelMap[n]}</span>}
+                      <span onClick={()=>removeFromSlot(di,slot,n)} style={{cursor:"pointer",color:"#dc2626",fontWeight:800,marginLeft:1}}>×</span>
+                    </span>
+                  );
+                })}
+                <button onClick={()=>{setAddSlot(open?null:slot);setPickSearch("");}}
+                  style={{width:24,height:24,borderRadius:5,border:"1px dashed #94a3b8",background:open?"#e0e7ff":"#f8fafc",color:"#475569",fontSize:15,fontWeight:700,cursor:"pointer",lineHeight:1}}>
+                  {open?"×":"+"}
+                </button>
+              </div>
+              {open&&(
+                <div style={{borderTop:"1px solid #e2e8f0",padding:8,background:"#f8fafc"}}>
+                  <input autoFocus placeholder="Search resident…" value={pickSearch} onChange={e=>setPickSearch(e.target.value)}
+                    style={{width:"100%",padding:"6px 8px",fontSize:12,borderRadius:5,border:"1px solid #cbd5e1",marginBottom:6,boxSizing:"border-box"}}/>
+                  <div style={{maxHeight:190,overflowY:"auto",display:"flex",flexWrap:"wrap",gap:5}}>
+                    {options.map(r=>{
+                      const vac=draftOnVacation(draftBlock,r.name,di);
+                      const unwanted=!vac&&draftUnwantedDay(draftBlock,r.name,row.date);
+                      const dup=placedToday.has(r.name);
+                      return(
+                        <button key={r.name} onClick={()=>addToSlot(di,slot,r.name)} title={vac?"On leave this week":unwanted?"Marked this day as unwanted":dup?"Already on call today":""}
+                          style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 8px",borderRadius:5,fontSize:11.5,fontWeight:600,cursor:"pointer",
+                            background:vac?"#fef2f2":unwanted?"#fff7ed":dup?"#fffbeb":"#fff",border:`1px solid ${vac?"#fca5a5":unwanted?"#fdba74":dup?"#fcd34d":"#cbd5e1"}`,color:vac?"#991b1b":unwanted?"#9a3412":"#334155"}}>
+                          {vac&&"🌴 "}{unwanted&&"🚫 "}{dup&&"⚠ "}{r.name}<span style={{fontSize:9,opacity:0.6}}>·{r.level}·{r.rotation}</span>
+                        </button>
+                      );
+                    })}
+                    {options.length===0&&<span style={{fontSize:11.5,color:"#94a3b8"}}>No matches.</span>}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        };
+        // Badge style for the read-only Full Schedule table, colored by this
+        // resident's per-block rotation (editRoster), same palette as the
+        // live Schedule tab's "By Rotation" color mode.
+        const badgeStyleFor=(name)=>{
+          const rot=(editRoster.find(r=>r.name===name)?.rotation||"").replace("/V","").split("/")[0];
+          const c=rotColors[rot]||{bg:"#f1f5f9",bd:"#94a3b8",tx:"#334155"};
+          return{display:"inline-flex",alignItems:"center",gap:2,background:c.bg,border:`1.5px solid ${c.bd}`,
+            color:c.tx,borderRadius:4,padding:"2px 6px",fontSize:10.5,fontWeight:600,whiteSpace:"nowrap",
+            margin:"1px 1px 2px",cursor:"pointer",userSelect:"none"};
+        };
+        const thStyle={padding:"6px 8px",background:"#1e293b",color:"#fff",fontWeight:700,borderRight:"1px solid #334155",textAlign:"left",fontSize:10.5};
+        const tdStyle={padding:"5px 6px",verticalAlign:"top",borderRight:"1px solid #e2e8f0",borderBottom:"1px solid #e2e8f0",minWidth:100};
+
+        return(
+          <div>
+            {/* View toggle: Day View vs the full 28-day grid, like the Schedule tab */}
+            <div style={{display:"flex",gap:6,marginBottom:8}}>
+              <button onClick={()=>setFullView(false)}
+                style={{padding:"6px 14px",borderRadius:6,fontSize:12,fontWeight:700,cursor:"pointer",
+                  border:`1px solid ${!fullView?"#1e3a5f":"#cbd5e1"}`,background:!fullView?"#1e3a5f":"#fff",color:!fullView?"#fff":"#475569"}}>
+                📅 Day View
+              </button>
+              <button onClick={()=>setFullView(true)}
+                style={{padding:"6px 14px",borderRadius:6,fontSize:12,fontWeight:700,cursor:"pointer",
+                  border:`1px solid ${fullView?"#1e3a5f":"#cbd5e1"}`,background:fullView?"#1e3a5f":"#fff",color:fullView?"#fff":"#475569"}}>
+                📋 Full Schedule
+              </button>
+            </div>
+
+            {/* Day navigator (Day View only) */}
+            {!fullView&&(
+              <div style={{background:isWE?"#0369a1":"#1e293b",borderRadius:10,padding:"9px 12px",marginBottom:8,display:"flex",alignItems:"center",gap:8,color:"#fff"}}>
+                <button onClick={()=>go(-1)} disabled={di===0} style={{minWidth:40,minHeight:40,fontSize:20,fontWeight:800,borderRadius:8,border:"none",background:"rgba(255,255,255,0.15)",color:"#fff",cursor:di===0?"default":"pointer",opacity:di===0?0.4:1}}>‹</button>
+                <div style={{flex:1,textAlign:"center"}}>
+                  <div style={{fontSize:15,fontWeight:800}}>{row.day}, {row.date} <span style={{fontSize:11,fontWeight:600,opacity:0.85}}>· {week} · {isWE?"Weekend":"Weekday"}</span></div>
+                  <select value={di} onChange={e=>{setDayIdx(Number(e.target.value));setAddSlot(null);}} style={{marginTop:4,fontSize:11.5,padding:"3px 6px",borderRadius:5,border:"none",background:"rgba(255,255,255,0.15)",color:"#fff"}}>
+                    {days.map((r,i)=>(<option key={i} value={i} style={{color:"#000"}}>{r.day}, {r.date}</option>))}
+                  </select>
+                </div>
+                <button onClick={()=>go(1)} disabled={di===days.length-1} style={{minWidth:40,minHeight:40,fontSize:20,fontWeight:800,borderRadius:8,border:"none",background:"rgba(255,255,255,0.15)",color:"#fff",cursor:di===days.length-1?"default":"pointer",opacity:di===days.length-1?0.4:1}}>›</button>
+              </div>
+            )}
+
+            <div style={{display:"flex",gap:8,alignItems:"flex-start"}}>
+              {/* ── On-Call Count side tab ── */}
+              <DraftTracker roster={editRoster} days={days} spotlight={spotlight} setSpotlight={setSpotlight}/>
+
+              {/* ── Resident profile panel, like the Schedule tab ── */}
+              {spotlight&&(
+                <DraftResidentPanel name={spotlight} roster={editRoster} days={days} blockNumber={draftBlock}
+                  onClose={()=>setSpotlight(null)} onRemove={removeFromSlot}/>
+              )}
+
+              <div style={{flex:1,minWidth:0,background:"#fff",borderRadius:8,padding:14,border:"1px solid #e2e8f0"}}>
+                {fullView?(
+                  <div style={{overflowX:"auto",borderRadius:8,border:"1px solid #94a3b8"}}>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                      <thead>
+                        <tr>
+                          <th style={{...thStyle,width:40}}>Day</th>
+                          <th style={{...thStyle,width:70}}>Date</th>
+                          {dcSlots.map(s=>(<th key={s} style={{...thStyle,background:dcSlotHdrBg[s]}}>{dcSlotLabel[s]}</th>))}
+                          {slots.map(s=>(<th key={s} style={{...thStyle,background:slotHdrBg[s]}}>{slotLabel[s]}</th>))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {days.map((r,ri)=>{
+                          const rIsWE=r.type==="WE";
+                          const rNoDC=r.day==="Fri"||r.day==="Sat";
+                          return(
+                            <tr key={r.date} style={{background:rIsWE?"#f0f9ff":ri%2===0?"#fff":"#f9fafb"}}>
+                              <td style={{...tdStyle,fontWeight:700,color:rIsWE?"#0369a1":"#1e293b"}}>{r.day}</td>
+                              <td style={{...tdStyle,fontWeight:700}}>{r.date}</td>
+                              {dcSlots.map(s=>(
+                                <td key={s} style={tdStyle}>
+                                  {rNoDC?<span style={{color:"#cbd5e1"}}>—</span>:
+                                    (r[s]||[]).length?(r[s]||[]).map(n=>(
+                                      <span key={n} onClick={()=>setSpotlight(n)} style={badgeStyleFor(n)}>{n}</span>
+                                    )):<span style={{color:"#cbd5e1"}}>—</span>}
+                                </td>
+                              ))}
+                              {slots.map(s=>(
+                                <td key={s} style={tdStyle}>
+                                  {(r[s]||[]).length?(r[s]||[]).map(n=>(
+                                    <span key={n} onClick={()=>setSpotlight(n)} style={badgeStyleFor(n)}>{n}</span>
+                                  )):<span style={{color:"#cbd5e1"}}>—</span>}
+                                </td>
+                              ))}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ):(
+                  <React.Fragment>
+                    {/* On-leave strip for the current week */}
+                    <div style={{fontSize:11,color:"#64748b",marginBottom:8,padding:"6px 10px",background:"#fffbeb",border:"1px solid #fde68a",borderRadius:6}}>
+                      <strong style={{color:"#92400e"}}>🌴 On leave ({week}):</strong>{" "}
+                      {onLeave.length?onLeave.join(", "):<span style={{color:"#94a3b8"}}>nobody</span>}
+                    </div>
+
+                    {/* Unwanted-day strip for this exact date, from the unified Unwanted Days tab */}
+                    <div style={{fontSize:11,color:"#64748b",marginBottom:10,padding:"6px 10px",background:"#fff7ed",border:"1px solid #fdba74",borderRadius:6}}>
+                      <strong style={{color:"#9a3412"}}>🚫 Marked unwanted today ({row.date}):</strong>{" "}
+                      {unwantedTodayNames.length?unwantedTodayNames.join(", "):<span style={{color:"#94a3b8"}}>nobody</span>}
+                    </div>
+
+                    {/* Call slots for the day */}
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(230px,1fr))",gap:10,marginBottom:12}}>
+                      {renderSlot("SO",slotLabel.SO,slotHdrBg.SO)}
+                      {renderSlot("NICU",slotLabel.NICU,slotHdrBg.NICU)}
+                      {renderSlot("PICU",slotLabel.PICU,slotHdrBg.PICU)}
+                      {renderSlot("PMW",slotLabel.PMW,slotHdrBg.PMW)}
+                      {!noDayCall&&renderSlot("DC_PMW",dcSlotLabel.DC_PMW,dcSlotHdrBg.DC_PMW,true)}
+                      {!noDayCall&&renderSlot("DC_NICU",dcSlotLabel.DC_NICU,dcSlotHdrBg.DC_NICU,true)}
+                    </div>
+
+                    {/* Live warnings for whatever's currently placed on this day */}
+                    {(()=>{
+                      const dayWarns=[];
+                      [...slots,...dcSlots].forEach(s=>(row[s]||[]).forEach(n=>{
+                        draftWarnings(days,draftBlock,n,di,s).forEach(w=>dayWarns.push(w));
+                      }));
+                      const uniq=[...new Set(dayWarns)];
+                      if(!uniq.length)return <div style={{fontSize:11.5,color:"#166534"}}>✓ No warnings for {row.date}.</div>;
+                      return(
+                        <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:8,padding:"8px 12px"}}>
+                          <div style={{fontSize:11.5,fontWeight:700,color:"#92400e",marginBottom:4}}>⚠️ {uniq.length} warning{uniq.length>1?"s":""} on {row.date}</div>
+                          {uniq.map((w,i)=>(<div key={i} style={{fontSize:11,color:"#78350f",paddingLeft:6,borderLeft:"3px solid #fbbf24",marginBottom:2}}>{w}</div>))}
+                        </div>
+                      );
+                    })()}
+                  </React.Fragment>
+                )}
+              </div>
+
+              {/* ── Availability side tab ── */}
+              <DraftAvailability days={days} roster={editRoster} blockNumber={draftBlock}/>
+            </div>
+          </div>
+        );
+      })()}
+    </div>
+  );
+}
+
 // ── App ───────────────────────────────────────────────────────────────────────
 function App(){
   // Schedule is now Firestore-backed: this listener is the ONLY thing that
@@ -2047,15 +3038,32 @@ function App(){
   // is what makes every viewer's screen update live, with no publish step
   // and no per-browser localStorage divergence possible.
   const[sched,setSched]     =useState([]);
+  // Block metadata (blockNumber/startDate/actingChief) lives as extra fields
+  // on this same doc, alongside `days`. Falls back to today's hardcoded
+  // Block 11 values so a doc published before this feature existed (which
+  // won't have these fields yet) keeps rendering exactly as it does today.
+  const[schedMeta,setSchedMeta]=useState(null);
   useEffect(()=>{
     return firebase.firestore().collection('schedules').doc('block11')
-      .onSnapshot(snap=>{ if(snap.exists) setSched(snap.data().days); });
+      .onSnapshot(snap=>{
+        if(!snap.exists)return;
+        const data=snap.data();
+        setSched(data.days);
+        setSchedMeta({
+          blockNumber:data.blockNumber||11,
+          startDate:data.startDate||{y:2026,m:7,d:5},
+          actingChief:data.actingChief||"Hassan AlSaif",
+        });
+      });
   },[]);
   const scheduleDocRef=firebase.firestore().collection('schedules').doc('block11');
-  const writeSchedule=(days)=>scheduleDocRef.set({
-    days, updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+  // {merge:true} so ordinary schedule edits (which never pass `extra`) don't
+  // wipe out the blockNumber/startDate/actingChief fields set by a publish.
+  const writeSchedule=(days,extra)=>scheduleDocRef.set({
+    days, ...(extra||{}),
+    updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
     updatedBy:firebase.auth().currentUser?.uid||null,
-  });
+  },{merge:true});
   const[history,setHistory] =useState([]);
   const[selected,setSelected]=useState(null);
   const[spotlight,setSpotlight]=useState(null); // name of resident whose panel is open
@@ -2238,6 +3246,53 @@ function App(){
     ...patch, updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
     updatedBy:firebase.auth().currentUser?.uid||null,
   },{merge:true});
+
+  // ── New Block draft: a single working draft doc (schedules/draftNextBlock,
+  // same collection as the live schedule so the existing firestore.rules
+  // wildcard already covers it) that the admin-only New Block tab reads/
+  // writes/publishes. Not the live schedule until explicitly published. ──
+  const[draft,setDraft]=useState(null);
+  useEffect(()=>{
+    return firebase.firestore().collection('schedules').doc('draftNextBlock')
+      .onSnapshot(snap=>{ setDraft(snap.exists?snap.data():null); });
+  },[]);
+  const draftDocRef=firebase.firestore().collection('schedules').doc('draftNextBlock');
+  const writeDraft=(data)=>draftDocRef.set({
+    ...data, updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+    updatedBy:firebase.auth().currentUser?.uid||null,
+  });
+  const clearDraft=()=>draftDocRef.delete();
+  const handlePublishBlock=async(d)=>{
+    if(!isAdmin)return;
+    const liveSnap=await scheduleDocRef.get();
+    const oldBlockNumber=schedMeta?.blockNumber||11;
+    if(liveSnap.exists){
+      await firebase.firestore().collection('schedules').doc(`archive_block${oldBlockNumber}`).set(liveSnap.data());
+    }
+    await writeSchedule(d.days,{blockNumber:d.blockNumber,startDate:d.startDate,actingChief:d.actingChief});
+    await clearDraft();
+  };
+
+  // ── Unwanted days, nested by block number in one collection (one doc per
+  // block, {days:{Name:[dates]}}) -- the single place the Unwanted Days tab
+  // and the New Block draft's warnings both read/write, instead of each
+  // block's requests living in a separate CSV. UNWANTED_BY_BLOCK mirrors this
+  // at module level so the plain draftWarnings()/draftUnwantedDay() helpers
+  // (called during render, outside React state) can read it synchronously. ──
+  const[unwantedByBlock,setUnwantedByBlock]=useState({});
+  useEffect(()=>{
+    return firebase.firestore().collection('unwantedDaysByBlock').onSnapshot(snap=>{
+      const map={};
+      snap.forEach(doc=>{ map[doc.id]=doc.data().days||{}; });
+      setUnwantedByBlock(map);
+      UNWANTED_BY_BLOCK=map;
+    });
+  },[]);
+  const writeUnwantedForBlock=(blockNumber,days)=>firebase.firestore().collection('unwantedDaysByBlock').doc(String(blockNumber)).set({
+    days, updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+    updatedBy:firebase.auth().currentUser?.uid||null,
+  });
+
   // ── Is a resident highlighted by the active filter or spotlight? ──
   const isHighlighted = name => {
     if(spotlight && name!==spotlight) return false;
@@ -2405,7 +3460,20 @@ function App(){
   };
   const undo=()=>{if(!isAdmin||!history.length)return;writeSchedule(history[history.length-1]);setHistory(h=>h.slice(0,-1));setWarnings([]);setSelected(null);};
   const reset=()=>{if(!isAdmin)return;if(!window.confirm("Reset the entire schedule to the original template? This cannot be undone."))return;writeSchedule(deepClone(initialSchedule));setHistory([]);setWarnings([]);setSelected(null);setMoveLog([]);};
-  const handleExport=async()=>{setExporting(true);setExportErr("");try{await exportDocx(sched);}catch(err){console.error(err);setExportErr(err.message||"Export failed.");}finally{setExporting(false);}};
+  const handleExport=async()=>{
+    setExporting(true);setExportErr("");
+    try{
+      // No meta at all (schedMeta null) means the template's own literal
+      // Block 11 header text is already correct -- don't patch it with our
+      // approximate Hijri conversion. Only pass meta once a real publish
+      // has set explicit block metadata.
+      await exportDocx(sched, schedMeta?{
+        blockNumber:schedMeta.blockNumber, startDate:schedMeta.startDate, actingChief:schedMeta.actingChief,
+        filename:`Block${schedMeta.blockNumber}_Schedule_Filled.docx`,
+      }:undefined);
+    }catch(err){console.error(err);setExportErr(err.message||"Export failed.");}
+    finally{setExporting(false);}
+  };
   const[isMobile,setIsMobile]=useState(()=>window.innerWidth<768);
   const[mobilePanelOpen,setMobilePanelOpen]=useState(null); // "tracker"|"availability"|"history"|null
   useEffect(()=>{
@@ -2612,7 +3680,7 @@ function App(){
         {/* ── Page tabs ── */}
         <div className="tab-strip" style={{display:"flex",gap:0,marginBottom:10,borderBottom:"2px solid #e2e8f0",
           overflowX:"auto",overflowY:"hidden",flexWrap:"nowrap",maxWidth:"100%",touchAction:"pan-x"}}>
-          {[["schedule","📅 Schedule"],["coverage","🩺 Daytime Coverage"],["consultants","🧑‍⚕️ Subspecialty Consultants"],["residents","👤 Residents"],["rota","📋 Master Rota"]].map(([p,label])=>(
+          {[["schedule","📅 Schedule"],["coverage","🩺 Daytime Coverage"],["consultants","🧑‍⚕️ Subspecialty Consultants"],["residents","👤 Residents"],["rota","📋 Master Rota"],["unwanted","🚫 Unwanted Days"],...(isAdmin?[["newblock","🆕 New Block"]]:[])].map(([p,label])=>(
             <button key={p} onClick={()=>setPage(p)} style={{
               padding:"6px 18px",fontSize:12,fontWeight:700,cursor:"pointer",border:"none",
               background:"none",borderBottom:`3px solid ${page===p?"#1e3a5f":"transparent"}`,
@@ -2624,9 +3692,18 @@ function App(){
 
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:8}}>
           <div>
-            <div style={{fontSize:15,fontWeight:800,color:"#1e3a5f"}}>QHN — Duty Rota Block #11</div>
-            <div style={{fontSize:11,color:"#475569",marginTop:1}}>05/07/2026 – 01/08/2026 · 20 Muharram – 17 Safar 1448</div>
-            <div style={{fontSize:11,color:"#64748b"}}>Acting Chief Resident: <strong>Hassan AlSaif</strong></div>
+            <div style={{fontSize:15,fontWeight:800,color:"#1e3a5f"}}>QHN — Duty Rota Block #{schedMeta?.blockNumber||11}</div>
+            <div style={{fontSize:11,color:"#475569",marginTop:1}}>
+              {schedMeta
+                // Only compute via the approximate Hijri conversion once a
+                // real publish has happened -- otherwise keep the exact
+                // literal Block 11 dates (our tabular algorithm can drift a
+                // day from the authoritative GCC calendar, see
+                // buildBlockSkeleton's comment).
+                ?(()=>{const sd=schedMeta.startDate;const{gregRange,hijriRange}=blockRangeLabels(sd.y,sd.m,sd.d);return`${gregRange} · ${hijriRange}`;})()
+                :"05/07/2026 – 01/08/2026 · 20 Muharram – 17 Safar 1448"}
+            </div>
+            <div style={{fontSize:11,color:"#64748b"}}>Acting Chief Resident: <strong>{schedMeta?.actingChief||"Hassan AlSaif"}</strong></div>
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:5,alignItems:"flex-end"}}>
             <div style={{display:"flex",gap:4,flexWrap:"wrap",justifyContent:"flex-end"}}>
@@ -2725,6 +3802,21 @@ function App(){
       {page==="rota"&&(
         <div onClick={e=>e.stopPropagation()}>
           <MasterRotaPage sched={sched}/>
+        </div>
+      )}
+
+      {/* ── PAGE 7: Unwanted Days (nested by block, feeds New Block's warnings) ── */}
+      {page==="unwanted"&&(
+        <div onClick={e=>e.stopPropagation()}>
+          <UnwantedDaysPage isAdmin={isAdmin} unwantedByBlock={unwantedByBlock} writeUnwantedForBlock={writeUnwantedForBlock}
+            defaultBlock={(schedMeta?.blockNumber||11)+1}/>
+        </div>
+      )}
+
+      {/* ── PAGE 6: New Block (admin-only) ── */}
+      {page==="newblock"&&isAdmin&&(
+        <div onClick={e=>e.stopPropagation()}>
+          <NewBlockPage schedMeta={schedMeta} draft={draft} writeDraft={writeDraft} clearDraft={clearDraft} onPublish={handlePublishBlock} isAdmin={isAdmin}/>
         </div>
       )}
 
